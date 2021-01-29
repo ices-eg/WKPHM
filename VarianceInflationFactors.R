@@ -3,7 +3,7 @@
 #Mixed effects models and extensions in ecology with R. (2009).
 #Zuur, AF, Ieno, EN, Walker, N, Saveliev, AA, and Smith, GM. Springer.
 
-#Copyright Highland Statistics LTD.
+#Copyright Highland Statistics LTD..
 
 #####################################################################
 #VIF FUNCTION.
