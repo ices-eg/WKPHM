@@ -1,49 +1,50 @@
-WKPHM Advice Template
-================
-WKPHM
-January 28, 2021
+---
+title: "WKPHM Advice Template"
+author: "WKPHM"
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output: github_document
+---
 
+```{r setup, include=FALSE}
+library(sf)
+library(rnaturalearth)
+library(ggplot2)
+library(ncdf4)
+library(rgdal)
+library(rgeos)
+library(gstat)
+library(maptools)
+library(raster)
+library(corrplot)
+library(dismo)
+library(PresenceAbsence)
+library(AICcmodavg)
+library(gridExtra)
+library(viridis)
+library(googledrive)
+source("VarianceInflationFactors.R")
+dir.create("Figures")
+dir.create("Predictions")
+knitr::opts_chunk$set(echo = TRUE)
+```
 ## Purpose
 
-The objective of this piece of code was to develop a relatively simple
-model for a species of coral that could be used to demonstrate the
-pieces of the proposed ICES PHM advice template. The species chosen was
-*Acanthogorgia armata*. It was chosen simply because it had a fairly
-large number of observations in the ICES VME database. This is not meant
-to be a realistic model of the distribution of *Acanthogorgia armata*,
-but is instead used here to generate the components of an PHM (data,
-model, residuals) that can be used to evaluate its predictions and
-utility.
+The objective of this piece of code was to develop a relatively simple model for a species of coral that could be used to demonstrate the pieces of the proposed ICES PHM advice template. The species chosen was *Acanthogorgia armata*. It was chosen simply because it had a fairly large number of observations in the ICES VME database. This is not meant to be a realistic model of the distribution of *Acanthogorgia armata*, but is instead used here to generate the components of an PHM (data, model, residuals) that can be used to evaluate its predictions and utility.
 
 ## Dependent data
 
-The dependent data for *Acanthogorgia armata* were observations of
-presence or absence in the open ICES VME database. In total there were
-901 observations of presence in the database. In the code below the
-counts for the species are also included in the data that is generated,
-but these were not used in the modeling at this time. Absences were
-inferred from sample locations where observations for other species were
-made, but *Acanthogorgia armata* were not recorded. In total there were
-\> 30,000 absences in the ICES VME database.
+The dependent data for *Acanthogorgia armata* were observations of presence or absence in the open ICES VME database. In total there were 901 observations of presence in the database. In the code below the counts for the species are also included in the data that is generated, but these were not used in the modeling at this time. Absences were inferred from sample locations where observations for other species were made, but *Acanthogorgia armata* were not recorded. In total there were > 30,000 absences in the ICES VME database.
 
 The code below does the following
 
-1.  Import the dependent data from the open ICES data base
-2.  Calculates a mean depth for each observation where an upper and
-    lower depth were recorded
-3.  Compiles a data frame of the unique observation locations (by their
-    recorded middle latitude and longitude)
-4.  Subsets all the records where *Acanthogorgia armata* was observed
-    and assigns them a presence (0) and sums any counts that were
-    recorded at the location (or provides count = 1 where no count was
-    provided, but presence was noted)
-5.  Merges those presence records with the entire database and assigns
-    presence and counts = 0 to the records with no presence observation
-6.  There was a single duplicate record for this sp
+1. Import the dependent data from the open ICES data base
+2. Calculates a mean depth for each observation where an upper and lower depth were recorded
+3. Compiles a data frame of the unique observation locations (by their recorded middle latitude and longitude)
+4. Subsets all the records where *Acanthogorgia armata* was observed and assigns them a presence (0) and sums any counts that were recorded at the location (or provides count = 1 where no count was provided, but presence was noted)
+5. Merges those presence records with the entire database and assigns presence and counts = 0 to the records with no presence observation
+6. There was a single duplicate record for this sp
 
-<!-- end list -->
-
-``` r
+```{r importdata,results='hide',message=FALSE,warning=FALSE}
 VME_data<-read.csv("vme_open_extraction11012021.csv",header=TRUE,stringsAsFactors=FALSE) #Import the entire database
 VME_data$Depth<-abs((as.numeric(VME_data$DepthLower)+as.numeric(VME_data$DepthUpper))/2) #Generate a mean depth for each point (where depths were collected) based on the upper and lower recorded depths
 All_depths<-aggregate(Depth~MiddleLatitude+MiddleLongitude,data=VME_data,FUN="mean",na.rm=TRUE) #Aggregate these depths to each position in the database
@@ -74,9 +75,11 @@ Acanth_arm<-Acanth_arm[-13706,] # Delete the remaining record
 dim(Acanth_arm)
 
 #table(Acanth_arm$Presence) # See how many presences (1) and absences (0) there are in the data
+
+
 ```
 
-``` r
+```{r MapThePoints,message=FALSE,warning=FALSE}
 #IMPORT A BASEMAP AND TRANSFORM TO A NICER PROJECTION FOR THE NORTH ATLANTIC
 bg = ne_countries(scale = "medium",  returnclass = "sf")
 p<-ggplot()+
@@ -103,11 +106,11 @@ p<-ggplot()+
 print(p)
 ```
 
-![](Acanth_arm_code_files/figure-gfm/MapThePoints-1.png)<!-- -->
-
 ## Explanatory variables
 
-``` r
+
+
+```{r pressure, eval=FALSE}
 bathy<-raster("GEBCO_bathy.tif")
 newproj<-crs(bathy)
 ICES_regions<-readOGR("Shapefiles","ICES_Areas_20160601_cut_dense_3857")
@@ -144,7 +147,7 @@ O2.project<-SpatialPointsDataFrame(coords=c(O2_data["Longitude"],O2_data["Latitu
 t1<-which(raster::extract(ICES_bathy,O2.project)>0)
 O2.project<-O2.project[t1,]
 
-#               Interpolate to raster
+#				Interpolate to raster
 O2.idw<-gstat(id = "O2", formula = O2~1, data=O2.project, nmax=8, set=list(idp = 2.5))
 O2.raster<-interpolate(ICES_bathy,O2.idw,overwrite=TRUE,xyOnly=TRUE,filename="O2raster", progress="text")
 
@@ -153,9 +156,11 @@ plot(O2.raster)
 
 O2.raster<-aggregate(O2.raster,fact=2,filename="O2",FUN="mean",progress="text",overwrite=TRUE)
 bathy<-aggregate(ICES_bathy,fact=2,filename="bathy",FUN="mean",progress="text",overwrite=TRUE)
+
 ```
 
-``` r
+```{r stackandextract,message=FALSE,warning=FALSE}
+
 temp <- tempfile(fileext = ".zip")
 drive_deauth()
 drive_download(as_id("1k0j9yTDFAme0zwxRLOJtrip3TXjKI9L6"), path = temp, overwrite = TRUE)
@@ -174,124 +179,36 @@ Acanth_arm<-subset(Acanth_arm,Acanth_arm$bathy>0)
 
 newproj<-crs(ICES_bathy)
 ICES_regions<-readOGR("./ICES_variables/Shapefiles","ICES_Areas_20160601_cut_dense_3857")
-```
-
-    ## OGR data source with driver: ESRI Shapefile 
-    ## Source: "C:\Users\rooperc\Desktop\ICES_WKPHM_CR\ICES_variables\Shapefiles", layer: "ICES_Areas_20160601_cut_dense_3857"
-    ## with 66 features
-    ## It has 10 fields
-    ## Integer64 fields read as strings:  OBJECTID_1 OBJECTID
-
-``` r
 ICES_regions<-spTransform(ICES_regions,newproj)
 ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
 ```
 
 ### Collinearity
 
-``` r
+
+```{r lookforcollinearity,message=FALSE,warning=FALSE}
 plot(raster.stack)
-```
 
-![](Acanth_arm_code_files/figure-gfm/lookforcollinearity-1.png)<!-- -->
-
-``` r
 cormat1<-cor(variables,use="complete.obs")
 corrplot(cormat1,method="number",type="lower")
-```
-
-![](Acanth_arm_code_files/figure-gfm/lookforcollinearity-2.png)<!-- -->
-
-``` r
 print(corvif(variables))
-```
 
-    ##           GVIF
-    ## bathy 1.234570
-    ## slope 1.188550
-    ## TPI   1.003658
-    ## O2    1.112178
+```
 
 ## Model building
 
 ### Model fitting
-
-``` r
+```{r buildsimplemodel,message=FALSE,warning=FALSE}
 TableData<-data.frame(Fold=character(),AIC=numeric(),threshold=numeric(),AUC_training=numeric(),AUC_testing=numeric(),TSS_training=numeric(),TSS_testing=numeric(),Cor_training=numeric(),Cor_testing=numeric(),RMSE_training=numeric(),RMSE_testing=numeric(),stringsAsFactors=FALSE)
 
 Acanth.GLM.pa<-glm(Presence~bathy+slope+TPI+O2+I(bathy^2)+I(slope^2)+I(TPI^2)+I(O2^2),data=Acanth_arm,family=binomial)
 summary(Acanth.GLM.pa)
-```
 
-    ## 
-    ## Call:
-    ## glm(formula = Presence ~ bathy + slope + TPI + O2 + I(bathy^2) + 
-    ##     I(slope^2) + I(TPI^2) + I(O2^2), family = binomial, data = Acanth_arm)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -0.8506  -0.0609  -0.0391  -0.0085   3.5760  
-    ## 
-    ## Coefficients:
-    ##               Estimate Std. Error z value Pr(>|z|)    
-    ## (Intercept) -6.008e+02  1.485e+02  -4.046 5.21e-05 ***
-    ## bathy       -1.051e-04  8.873e-04  -0.118 0.905718    
-    ## slope        7.828e+01  2.131e+01   3.673 0.000240 ***
-    ## TPI          6.872e-02  3.265e-02   2.104 0.035344 *  
-    ## O2           4.754e+00  1.174e+00   4.051 5.10e-05 ***
-    ## I(bathy^2)  -5.258e-08  2.295e-07  -0.229 0.818759    
-    ## I(slope^2)  -4.595e+02  1.343e+02  -3.422 0.000621 ***
-    ## I(TPI^2)    -2.806e-03  1.181e-03  -2.376 0.017503 *  
-    ## I(O2^2)     -9.467e-03  2.313e-03  -4.092 4.27e-05 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
-    ##     Null deviance: 249.07  on 3733  degrees of freedom
-    ## Residual deviance: 171.70  on 3725  degrees of freedom
-    ##   (4 observations deleted due to missingness)
-    ## AIC: 189.7
-    ## 
-    ## Number of Fisher Scoring iterations: 12
-
-``` r
 #Stepwise reduction based on AIC
 Acanth.GLM.pa<-glm(Presence~slope+TPI+O2+I(slope^2)+I(TPI^2)+I(O2^2),data=Acanth_arm,family=binomial)
 summary(Acanth.GLM.pa)
-```
 
-    ## 
-    ## Call:
-    ## glm(formula = Presence ~ slope + TPI + O2 + I(slope^2) + I(TPI^2) + 
-    ##     I(O2^2), family = binomial, data = Acanth_arm)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -0.7619  -0.0595  -0.0392  -0.0089   3.6151  
-    ## 
-    ## Coefficients:
-    ##               Estimate Std. Error z value Pr(>|z|)    
-    ## (Intercept) -5.603e+02  1.400e+02  -4.003 6.26e-05 ***
-    ## slope        7.706e+01  1.980e+01   3.893 9.92e-05 ***
-    ## TPI          6.863e-02  3.257e-02   2.107 0.035107 *  
-    ## O2           4.428e+00  1.105e+00   4.008 6.12e-05 ***
-    ## I(slope^2)  -4.568e+02  1.320e+02  -3.461 0.000537 ***
-    ## I(TPI^2)    -2.718e-03  1.161e-03  -2.342 0.019201 *  
-    ## I(O2^2)     -8.816e-03  2.176e-03  -4.051 5.10e-05 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
-    ##     Null deviance: 249.07  on 3733  degrees of freedom
-    ## Residual deviance: 173.02  on 3727  degrees of freedom
-    ##   (4 observations deleted due to missingness)
-    ## AIC: 187.02
-    ## 
-    ## Number of Fisher Scoring iterations: 12
 
-``` r
 ######TEST THE PREDICTIONS AGAINST THE TRAINING DATA############################
 TableData[1,1]<-"Full model"
 train.auc_data<-data.frame(cbind(seq(1,length(Acanth.GLM.pa$y),1),Acanth.GLM.pa$y,Acanth.GLM.pa$fitted.values))
@@ -309,14 +226,7 @@ TableData[1,8]<-round(cor.test(train.auc_data[,2],train.auc_data[,3],method="spe
 TableData[1,2]<-Acanth.GLM.pa$aic
 
 print(cmx(train.auc_data,threshold=train.threshold))
-```
 
-    ##          observed
-    ## predicted    1    0
-    ##         1   17  346
-    ##         0    3 3368
-
-``` r
 #RESPONSE CURVE PLOTS
 ## generate prediction frame
 TPIframe <- data.frame(TPI=seq(min(Acanth_arm$TPI,na.rm=TRUE),max(Acanth_arm$TPI,na.rm=TRUE),length=51),O2=median(Acanth_arm$O2,na.rm=TRUE),slope=median(Acanth_arm$slope,na.rm=TRUE))
@@ -342,69 +252,37 @@ p2<-ggplot(slopeframe)+geom_ribbon(aes(x=slope,ymin=predicted-se.fit,ymax=predic
 png("./Figures/response_curvesFull.png",width=8,height=6,units="in",res=300)
 grid.arrange(p1,p2,p3,ncol=1)
 dev.off()
-```
 
-    ## png 
-    ##   2
-
-``` r
 ####FIGURE 3 - MAXENT DIAGNOSTICS PLOTS
 #Plots for data
 png(filename="./Figures/GLMdiagnosticsFull.png",width=6,height=6,res=300,units="in")
 par(mfcol=c(2,2),family="sans",mar=c(4,4,1,.01))
 auc.roc.plot(train.auc_data,opt.methods=2,main="",add.legend=F,xlab="Specificity",ylab="Sensitivity",add.opt.legend=F)
 calibration.plot(train.auc_data,N.bins=10,xlab="Predicted occurence",ylab="Proportion of observed occurence",main="")
-```
-
-    ##    BinCenter NBin      BinObs     BinPred BinObsCIlower BinObsCIupper
-    ## 1       0.05 3693 0.004332521 0.003814336   0.002478376   0.007026232
-    ## 2       0.15   36 0.083333333 0.131696602   0.017526496   0.224689761
-    ## 3       0.25    5 0.200000000 0.234516165   0.005050763   0.716417936
-    ## 4       0.35    0          NA          NA            NA            NA
-    ## 5       0.45    0          NA          NA            NA            NA
-    ## 6       0.55    0          NA          NA            NA            NA
-    ## 7       0.65    0          NA          NA            NA            NA
-    ## 8       0.75    0          NA          NA            NA            NA
-    ## 9       0.85    0          NA          NA            NA            NA
-    ## 10      0.95    0          NA          NA            NA            NA
-
-``` r
 presence.absence.hist(train.auc_data,truncate.tallest=TRUE,main="",ylab="Number of observations",xlab="Predicted probability")
-```
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-``` r
 dev.off()
-```
 
-    ## png 
-    ##   2
+
+```
 
 ### Model predictions
+```{r simplemodelpredictions,message=FALSE,warning=FALSE}
 
-``` r
 #######MAKE THE PREDICTION RASTER ##############################################
 #Predict the model to a raster to see where suitable habitat is predicted
 Acanth.GLM.pa.raster<-predict(raster.stack, Acanth.GLM.pa,filename="./Predictions/GLMFull",fun=predict, na.rm=TRUE,overwrite=TRUE,progress="text",type="response",newdata.guaranteed=TRUE)
-```
 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
-    ## 
 
-``` r
 png(filename="./Figures/ProbabilityMapFull.png",width=6,height=6.5,res=300,units="in")
 par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
 plot(Acanth.GLM.pa.raster, main = "", box=F,col = viridis(255),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Probability of presence",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
 dev.off()
-```
 
-    ## png 
-    ##   2
+```
 
 ## Model validation
 
-``` r
+```{r simplemodelvalidation,message=FALSE,warning=FALSE}
 ##Sample training and testing data sets####
 Acanth_arm$Group<-kfold(Acanth_arm,k=5)
 
@@ -496,83 +374,15 @@ par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
 plot(Acanth.GLM.pa.rasterf, main = "", box=F,col = viridis(255),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Probability of presence",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
 dev.off()
 }
+
 ```
 
-    ##          observed
-    ## predicted    1    0
-    ##         1    8  121
-    ##         0    4 2854
-    ##          observed
-    ## predicted   1   0
-    ##         1   4  27
-    ##         0   4 712
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
-    ## 
-
-    ##          observed
-    ## predicted    1    0
-    ##         1   16  278
-    ##         0    2 2692
-    ##          observed
-    ## predicted   1   0
-    ##         1   0  78
-    ##         0   2 666
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
-    ## 
-
-    ##          observed
-    ## predicted    1    0
-    ##         1   14  275
-    ##         0    2 2695
-    ##          observed
-    ## predicted   1   0
-    ##         1   3  69
-    ##         0   1 675
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
-    ## 
-
-    ##          observed
-    ## predicted    1    0
-    ##         1   15  310
-    ##         0    3 2661
-    ##          observed
-    ## predicted   1   0
-    ##         1   2  77
-    ##         0   0 666
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
-    ## 
-
-    ##          observed
-    ## predicted    1    0
-    ##         1   13  273
-    ##         0    3 2697
-    ##          observed
-    ## predicted   1   0
-    ##         1   3  73
-    ##         0   1 671
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
-    ## 
 
 ## Model uncertainty
 
 ### Spatial patterns in residuals
 
-``` r
+```{r mapmodeluncertainty,message=FALSE,warning=FALSE}
 ##################################################################
 
 Acanth.GLM.padata<-subset(Acanth.GLM.pa$data,Acanth.GLM.pa$data$slope>=0)
@@ -599,12 +409,8 @@ p<-ggplot()+
 png(filename="./Figures/Residuals.png",width=6,height=7,res=300,units="in")
 print(p)
 dev.off()
-```
 
-    ## png 
-    ##   2
 
-``` r
 #Calculate prediction error and SE
 
 F1<-raster("./Predictions/GLMFold1")
@@ -620,7 +426,7 @@ png(filename="./Figures/Fullmapse.png",width=6,height=7,res=300,units="in")
 par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
 plot(Prediction.se, main = "", box=F,col = colorRampPalette(c("darkgreen","coral"))(30),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Prediction standard error",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
 dev.off()
+
 ```
 
-    ## png 
-    ##   2
+
