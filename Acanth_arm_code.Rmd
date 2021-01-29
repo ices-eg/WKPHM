@@ -108,54 +108,54 @@ print(p)
 
 ## Explanatory variables
 
-
+NOTE: This section of code is for reference only. I have not provided the raw data from GEBCO or World Ocean Atlas since the files are so large and take so much time to process. I can provide these on request (Chris Rooper).
 
 ```{r pressure, eval=FALSE}
-bathy<-raster("GEBCO_bathy.tif")
-newproj<-crs(bathy)
-ICES_regions<-readOGR("Shapefiles","ICES_Areas_20160601_cut_dense_3857")
-ICES_regions<-spTransform(ICES_regions,newproj)
-ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
-plot(bathy)
-plot(ICES_regions3,add=TRUE,border="red")
-points(cbind(Acanth_arm$Longitude[Acanth_arm$Presence==1],Acanth_arm$Latitude[Acanth_arm$Presence==1]),pch=20,col="purple")
-
-ICES_bathy<-crop(bathy,ICES_regions3,progress="text",overwrite=TRUE,filename="ICES_bathy3")
-ICES_bathy[ICES_bathy>0]<-NA
-ICES_bathy<-ICES_bathy*-1
-writeRaster(ICES_bathy,"ICES_bathy3",overwrite=TRUE)
-plot(ICES_bathy)
-
-file1<-nc_open("woa18_all_o00_01.nc")
-O2<-ncvar_get(file1,varid="o_an",collapse_degen = FALSE)
-Lat<-as.vector(ncvar_get(file1,varid="lat"))
-Lon<-as.vector(ncvar_get(file1,varid="lon"))
-Depth<-as.vector(ncvar_get(file1,varid="depth"))
-Lon1<-rep(Lon,length(Lat)*length(Depth))
-Lat1<-rep(rep(Lat,each=length(Lon)),length(Depth))
-Depth1<-rep(rep(Depth,each=length(Lon)),each=length(Lat))
-O2<-as.vector(ncvar_get(file1,varid="o_an"))
-O2_data<-data.frame(Longitude=Lon1,Latitude=Lat1,Depth=Depth1)
-t1<-which(O2_data$Latitude>=30&O2_data$Latitude<=87&O2_data$Longitude>=-80&O2_data$Longitude<=60)
-O2_data<-data.frame(Longitude=Lon1[t1],Latitude=Lat1[t1],Depth=Depth1[t1],O2=O2[t1])
-O2_data<-subset(O2_data,O2_data$O2>=0)
-O2_depth<-aggregate(Depth~Longitude+Latitude,data=O2_data,FUN="min")
-O2_data<-merge(O2_depth,O2_data,by=c("Longitude","Latitude","Depth"))
-nc_close(file1)
-
-O2.project<-SpatialPointsDataFrame(coords=c(O2_data["Longitude"],O2_data["Latitude"]),data=O2_data["O2"], proj4string=newproj) 
-t1<-which(raster::extract(ICES_bathy,O2.project)>0)
-O2.project<-O2.project[t1,]
-
-#				Interpolate to raster
-O2.idw<-gstat(id = "O2", formula = O2~1, data=O2.project, nmax=8, set=list(idp = 2.5))
-O2.raster<-interpolate(ICES_bathy,O2.idw,overwrite=TRUE,xyOnly=TRUE,filename="O2raster", progress="text")
-
-O2.raster<-mask(O2.raster,ICES_bathy,overwrite=TRUE, filename="O2raster2")
-plot(O2.raster)
-
-O2.raster<-aggregate(O2.raster,fact=2,filename="O2",FUN="mean",progress="text",overwrite=TRUE)
-bathy<-aggregate(ICES_bathy,fact=2,filename="bathy",FUN="mean",progress="text",overwrite=TRUE)
+# bathy<-raster("GEBCO_bathy.tif")
+# newproj<-crs(bathy)
+# ICES_regions<-readOGR("Shapefiles","ICES_Areas_20160601_cut_dense_3857")
+# ICES_regions<-spTransform(ICES_regions,newproj)
+# ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
+# plot(bathy)
+# plot(ICES_regions3,add=TRUE,border="red")
+# points(cbind(Acanth_arm$Longitude[Acanth_arm$Presence==1],Acanth_arm$Latitude[Acanth_arm$Presence==1]),pch=20,col="purple")
+# 
+# ICES_bathy<-crop(bathy,ICES_regions3,progress="text",overwrite=TRUE,filename="ICES_bathy3")
+# ICES_bathy[ICES_bathy>0]<-NA
+# ICES_bathy<-ICES_bathy*-1
+# writeRaster(ICES_bathy,"ICES_bathy3",overwrite=TRUE)
+# plot(ICES_bathy)
+# 
+# file1<-nc_open("woa18_all_o00_01.nc")
+# O2<-ncvar_get(file1,varid="o_an",collapse_degen = FALSE)
+# Lat<-as.vector(ncvar_get(file1,varid="lat"))
+# Lon<-as.vector(ncvar_get(file1,varid="lon"))
+# Depth<-as.vector(ncvar_get(file1,varid="depth"))
+# Lon1<-rep(Lon,length(Lat)*length(Depth))
+# Lat1<-rep(rep(Lat,each=length(Lon)),length(Depth))
+# Depth1<-rep(rep(Depth,each=length(Lon)),each=length(Lat))
+# O2<-as.vector(ncvar_get(file1,varid="o_an"))
+# O2_data<-data.frame(Longitude=Lon1,Latitude=Lat1,Depth=Depth1)
+# t1<-which(O2_data$Latitude>=30&O2_data$Latitude<=87&O2_data$Longitude>=-80&O2_data$Longitude<=60)
+# O2_data<-data.frame(Longitude=Lon1[t1],Latitude=Lat1[t1],Depth=Depth1[t1],O2=O2[t1])
+# O2_data<-subset(O2_data,O2_data$O2>=0)
+# O2_depth<-aggregate(Depth~Longitude+Latitude,data=O2_data,FUN="min")
+# O2_data<-merge(O2_depth,O2_data,by=c("Longitude","Latitude","Depth"))
+# nc_close(file1)
+# 
+# O2.project<-SpatialPointsDataFrame(coords=c(O2_data["Longitude"],O2_data["Latitude"]),data=O2_data["O2"], proj4string=newproj) 
+# t1<-which(raster::extract(ICES_bathy,O2.project)>0)
+# O2.project<-O2.project[t1,]
+# 
+# #				Interpolate to raster
+# O2.idw<-gstat(id = "O2", formula = O2~1, data=O2.project, nmax=8, set=list(idp = 2.5))
+# O2.raster<-interpolate(ICES_bathy,O2.idw,overwrite=TRUE,xyOnly=TRUE,filename="O2raster", progress="text")
+# 
+# O2.raster<-mask(O2.raster,ICES_bathy,overwrite=TRUE, filename="O2raster2")
+# plot(O2.raster)
+# 
+# O2.raster<-aggregate(O2.raster,fact=2,filename="O2",FUN="mean",progress="text",overwrite=TRUE)
+# bathy<-aggregate(ICES_bathy,fact=2,filename="bathy",FUN="mean",progress="text",overwrite=TRUE)
 
 ```
 
