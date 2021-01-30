@@ -42,7 +42,7 @@ The code below does the following
 3. Compiles a data frame of the unique observation locations (by their recorded middle latitude and longitude)
 4. Subsets all the records where *Acanthogorgia armata* was observed and assigns them a presence (0) and sums any counts that were recorded at the location (or provides count = 1 where no count was provided, but presence was noted)
 5. Merges those presence records with the entire database and assigns presence and counts = 0 to the records with no presence observation
-6. There was a single duplicate record for this sp
+6. There was a single duplicate record for this species where one entry included a count = 1 and one a count = 3. The counts were summed to 4 and the duplicate line removed.
 
 ```{r importdata,results='hide',message=FALSE,warning=FALSE}
 VME_data<-read.csv("vme_open_extraction11012021.csv",header=TRUE,stringsAsFactors=FALSE) #Import the entire database
@@ -79,7 +79,10 @@ dim(Acanth_arm)
 
 ```
 
-```{r MapThePoints,message=FALSE,warning=FALSE}
+Next the entire set of data points were mapped to show the distribution of presences and absences. (Note that I split the code to insert the figures throughout the document, mostly so it would produce hard copies of the figures themselves as .png files.)
+
+
+```{r MapThePoints,message=FALSE,warning=FALSE,results="hide"}
 #IMPORT A BASEMAP AND TRANSFORM TO A NICER PROJECTION FOR THE NORTH ATLANTIC
 bg = ne_countries(scale = "medium",  returnclass = "sf")
 p<-ggplot()+
@@ -103,12 +106,28 @@ p<-ggplot()+
   theme_dark()+
   theme(panel.grid = element_blank())
 
+png("./Figures/Figure1.png",height=6,width=6,unit="in",res=300)
 print(p)
+dev.off()
+
+```
+
+
+```{r figure1, fig.cap="Locations of presence and absence observations for *Acanthogorgia armata* from the ICES database", echo=FALSE}
+knitr::include_graphics(here::here("./Figures/Figure1.png"))
 ```
 
 ## Explanatory variables
 
-NOTE: This section of code is for reference only. I have not provided the raw data from GEBCO or World Ocean Atlas since the files are so large and take so much time to process. I can provide these on request (Chris Rooper).
+Based on the distribution of presences and absences in Figure 1 (and the desire for the code to run fairly fast), a subset of the ICES subareas (SubAreas 6,7,8,9,10 and 12) were chosen for the modeling. All subsequent data layers were trimmed to include only observations and explanatory variables from this region.
+
+The explanatory variables used for this exercise were bathymetry and two derivitives of bathymetry and one environmental variable. The bathymetry used here was downloaded from the GEBCO website (GEBCO_2020 grid; www.gebco.net/data_and_products/gridded_bathymetry_data). It consists of gridded bathymetry from a wide varieity of sources on a 15 arc-second grid for the globe. The details of the data sources can be found on the website (GEBCO Compilation Group (2020) GEBCO 2020 Grid (doi:10.5285/a29c5465-b138-234d-e053-6c86abc040b9)).  
+
+Oxygen data were downloaded from the World Ocean Atlas 2018 database (https://www.nodc.noaa.gov/OC5/woa18/). This data is a compilation of oxygen measurements averaged over time for as long as there are measurments at standardized depth intervals and on a standard 0.5 degree longitude and latitude grid. These data were clipped to the area of interest and interpolated to the 15 arc-second grid used by the bathymetry.
+
+Both the bathymetry and oxygen layers were aggregated to a 30 arc-second grid in order to save processing time. 
+
+NOTE: This section of code is for reference only and describes how the raw data was processed. I have not provided the raw data from GEBCO or World Ocean Atlas since the files are so large and take so much time to process. Neither these or the aggregated rasters were small enough to upload to the github site, so they are located in a zip file on my google drive. I can provide the raw files on request (Chris Rooper), the code below downloads the aggregated layers from the google drive.
 
 ```{r pressure, eval=FALSE}
 # bathy<-raster("GEBCO_bathy.tif")
@@ -159,35 +178,49 @@ NOTE: This section of code is for reference only. I have not provided the raw da
 
 ```
 
-```{r stackandextract,message=FALSE,warning=FALSE}
+From the aggregated bathymetry two derived variables (slope and topographic position index) were calculated using the raster package (Hijmans 2019). The four explanatory variables are shown in Figure 2.  
 
+
+```{r stackandextract,cache=TRUE,message=FALSE,warning=FALSE,results="hide"}
+#Download the depth, oxygen and ICES area rasters and polygon from the google drive
 temp <- tempfile(fileext = ".zip")
 drive_deauth()
 drive_download(as_id("1k0j9yTDFAme0zwxRLOJtrip3TXjKI9L6"), path = temp, overwrite = TRUE)
 unzip(temp,overwrite=TRUE)
 
+#Read in the raster layers and derive slope and TPI from the bathymerty
 ICES_bathy<-raster("./ICES_variables/bathy")
 ICES_slope<-terrain(ICES_bathy,opt="slope",progress="text",overwrite=TRUE)
 ICES_TPI<-terrain(ICES_bathy,opt="tpi",progress="text",overwrite=TRUE)
 O2.raster<-raster("./ICES_variables/O2")
 raster.stack<-stack(ICES_bathy,ICES_slope,ICES_TPI,O2.raster)
 names(raster.stack)<-c("bathy","slope","TPI","O2")
+#Extract the explanatory variables to the VME data locations
 variables<-data.frame(raster::extract(raster.stack,cbind(Acanth_arm$Longitude,Acanth_arm$Latitude)))
 Acanth_arm<-cbind(Acanth_arm,variables)
 variables<-subset(variables,variables$bathy>0)
 Acanth_arm<-subset(Acanth_arm,Acanth_arm$bathy>0)
 
+#Import the ICES region shapefile and subset to include only SubAreas 6-12
 newproj<-crs(ICES_bathy)
 ICES_regions<-readOGR("./ICES_variables/Shapefiles","ICES_Areas_20160601_cut_dense_3857")
 ICES_regions<-spTransform(ICES_regions,newproj)
 ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
+
+png("./Figures/Figure2.png",height=6,width=6,units="in",res=300)
+plot(raster.stack)
+dev.off()
+```
+
+```{r figure2, fig.cap="Map of bathymetry, slope, TPI and Oxygen used as explanatory variables in this analysis of ICES VME data", echo=FALSE}
+knitr::include_graphics(here::here("./Figures/Figure2.png"))
 ```
 
 ### Collinearity
 
+The four explanatory variables were examined for collinearity using a pearson correlations. 
 
 ```{r lookforcollinearity,message=FALSE,warning=FALSE}
-plot(raster.stack)
 
 cormat1<-cor(variables,use="complete.obs")
 corrplot(cormat1,method="number",type="lower")
@@ -266,7 +299,7 @@ dev.off()
 ```
 
 ### Model predictions
-```{r simplemodelpredictions,message=FALSE,warning=FALSE}
+```{r simplemodelpredictions,message=FALSE,warning=FALSE, cache=TRUE}
 
 #######MAKE THE PREDICTION RASTER ##############################################
 #Predict the model to a raster to see where suitable habitat is predicted
@@ -282,7 +315,7 @@ dev.off()
 
 ## Model validation
 
-```{r simplemodelvalidation,message=FALSE,warning=FALSE}
+```{r simplemodelvalidation,message=FALSE,warning=FALSE, cache=TRUE}
 ##Sample training and testing data sets####
 Acanth_arm$Group<-kfold(Acanth_arm,k=5)
 
@@ -382,7 +415,7 @@ dev.off()
 
 ### Spatial patterns in residuals
 
-```{r mapmodeluncertainty,message=FALSE,warning=FALSE}
+```{r mapmodeluncertainty,message=FALSE,warning=FALSE, cache=TRUE}
 ##################################################################
 
 Acanth.GLM.padata<-subset(Acanth.GLM.pa$data,Acanth.GLM.pa$data$slope>=0)
