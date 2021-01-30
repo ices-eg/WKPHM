@@ -1,7 +1,7 @@
 WKPHM Advice Template
 ================
 WKPHM
-January 28, 2021
+January 30, 2021
 
 ## Purpose
 
@@ -39,7 +39,9 @@ The code below does the following
     provided, but presence was noted)
 5.  Merges those presence records with the entire database and assigns
     presence and counts = 0 to the records with no presence observation
-6.  There was a single duplicate record for this sp
+6.  There was a single duplicate record for this species where one entry
+    included a count = 1 and one a count = 3. The counts were summed to
+    4 and the duplicate line removed.
 
 <!-- end list -->
 
@@ -76,6 +78,11 @@ dim(Acanth_arm)
 #table(Acanth_arm$Presence) # See how many presences (1) and absences (0) there are in the data
 ```
 
+Next the entire set of data points were mapped to show the distribution
+of presences and absences. (Note that I split the code to insert the
+figures throughout the document, mostly so it would produce hard copies
+of the figures themselves as .png files.)
+
 ``` r
 #IMPORT A BASEMAP AND TRANSFORM TO A NICER PROJECTION FOR THE NORTH ATLANTIC
 bg = ne_countries(scale = "medium",  returnclass = "sf")
@@ -100,121 +107,218 @@ p<-ggplot()+
   theme_dark()+
   theme(panel.grid = element_blank())
 
+png("./Figures/Figure1.png",height=6,width=6,unit="in",res=300)
 print(p)
+dev.off()
 ```
 
-![](Acanth_arm_code_files/figure-gfm/MapThePoints-1.png)<!-- -->
+<div class="figure">
+
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Figure1.png" alt="Figure 1. Locations of presence and absence observations for *Acanthogorgia armata* from the ICES database" width="1800" />
+
+<p class="caption">
+
+Figure 1. Locations of presence and absence observations for
+*Acanthogorgia armata* from the ICES database
+
+</p>
+
+</div>
 
 ## Explanatory variables
 
+Based on the distribution of presences and absences in Figure 1 (and the
+desire for the code to run fairly fast), a subset of the ICES subareas
+(SubAreas 6,7,8,9,10 and 12) were chosen for the modeling. All
+subsequent data layers were trimmed to include only observations and
+explanatory variables from this region.
+
+The explanatory variables used for this exercise were bathymetry and two
+derivitives of bathymetry and one environmental variable. The bathymetry
+used here was downloaded from the GEBCO website (GEBCO\_2020 grid;
+www.gebco.net/data\_and\_products/gridded\_bathymetry\_data). It
+consists of gridded bathymetry from a wide varieity of sources on a 15
+arc-second grid for the globe. The details of the data sources can be
+found on the website (GEBCO Compilation Group (2020) GEBCO 2020 Grid
+(<doi:10.5285/a29c5465-b138-234d-e053-6c86abc040b9>)).
+
+Oxygen data were downloaded from the World Ocean Atlas 2018 database
+(<https://www.nodc.noaa.gov/OC5/woa18/>). This data is a compilation of
+oxygen measurements averaged over time for as long as there are
+measurments at standardized depth intervals and on a standard 0.5 degree
+longitude and latitude grid. These data were clipped to the area of
+interest and interpolated to the 15 arc-second grid used by the
+bathymetry.
+
+Both the bathymetry and oxygen layers were aggregated to a 30 arc-second
+grid in order to save processing time.
+
+NOTE: This section of code is for reference only and describes how the
+raw data was processed. I have not provided the raw data from GEBCO or
+World Ocean Atlas since the files are so large and take so much time to
+process. Neither these or the aggregated rasters were small enough to
+upload to the github site, so they are located in a zip file on my
+google drive. I can provide the raw files on request (Chris Rooper), the
+code below downloads the aggregated layers from the google drive.
+
 ``` r
-bathy<-raster("GEBCO_bathy.tif")
-newproj<-crs(bathy)
-ICES_regions<-readOGR("Shapefiles","ICES_Areas_20160601_cut_dense_3857")
-ICES_regions<-spTransform(ICES_regions,newproj)
-ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
-plot(bathy)
-plot(ICES_regions3,add=TRUE,border="red")
-points(cbind(Acanth_arm$Longitude[Acanth_arm$Presence==1],Acanth_arm$Latitude[Acanth_arm$Presence==1]),pch=20,col="purple")
-
-ICES_bathy<-crop(bathy,ICES_regions3,progress="text",overwrite=TRUE,filename="ICES_bathy3")
-ICES_bathy[ICES_bathy>0]<-NA
-ICES_bathy<-ICES_bathy*-1
-writeRaster(ICES_bathy,"ICES_bathy3",overwrite=TRUE)
-plot(ICES_bathy)
-
-file1<-nc_open("woa18_all_o00_01.nc")
-O2<-ncvar_get(file1,varid="o_an",collapse_degen = FALSE)
-Lat<-as.vector(ncvar_get(file1,varid="lat"))
-Lon<-as.vector(ncvar_get(file1,varid="lon"))
-Depth<-as.vector(ncvar_get(file1,varid="depth"))
-Lon1<-rep(Lon,length(Lat)*length(Depth))
-Lat1<-rep(rep(Lat,each=length(Lon)),length(Depth))
-Depth1<-rep(rep(Depth,each=length(Lon)),each=length(Lat))
-O2<-as.vector(ncvar_get(file1,varid="o_an"))
-O2_data<-data.frame(Longitude=Lon1,Latitude=Lat1,Depth=Depth1)
-t1<-which(O2_data$Latitude>=30&O2_data$Latitude<=87&O2_data$Longitude>=-80&O2_data$Longitude<=60)
-O2_data<-data.frame(Longitude=Lon1[t1],Latitude=Lat1[t1],Depth=Depth1[t1],O2=O2[t1])
-O2_data<-subset(O2_data,O2_data$O2>=0)
-O2_depth<-aggregate(Depth~Longitude+Latitude,data=O2_data,FUN="min")
-O2_data<-merge(O2_depth,O2_data,by=c("Longitude","Latitude","Depth"))
-nc_close(file1)
-
-O2.project<-SpatialPointsDataFrame(coords=c(O2_data["Longitude"],O2_data["Latitude"]),data=O2_data["O2"], proj4string=newproj) 
-t1<-which(raster::extract(ICES_bathy,O2.project)>0)
-O2.project<-O2.project[t1,]
-
-#               Interpolate to raster
-O2.idw<-gstat(id = "O2", formula = O2~1, data=O2.project, nmax=8, set=list(idp = 2.5))
-O2.raster<-interpolate(ICES_bathy,O2.idw,overwrite=TRUE,xyOnly=TRUE,filename="O2raster", progress="text")
-
-O2.raster<-mask(O2.raster,ICES_bathy,overwrite=TRUE, filename="O2raster2")
-plot(O2.raster)
-
-O2.raster<-aggregate(O2.raster,fact=2,filename="O2",FUN="mean",progress="text",overwrite=TRUE)
-bathy<-aggregate(ICES_bathy,fact=2,filename="bathy",FUN="mean",progress="text",overwrite=TRUE)
+# bathy<-raster("GEBCO_bathy.tif")
+# newproj<-crs(bathy)
+# ICES_regions<-readOGR("Shapefiles","ICES_Areas_20160601_cut_dense_3857")
+# ICES_regions<-spTransform(ICES_regions,newproj)
+# ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
+# plot(bathy)
+# plot(ICES_regions3,add=TRUE,border="red")
+# points(cbind(Acanth_arm$Longitude[Acanth_arm$Presence==1],Acanth_arm$Latitude[Acanth_arm$Presence==1]),pch=20,col="purple")
+# 
+# ICES_bathy<-crop(bathy,ICES_regions3,progress="text",overwrite=TRUE,filename="ICES_bathy3")
+# ICES_bathy[ICES_bathy>0]<-NA
+# ICES_bathy<-ICES_bathy*-1
+# writeRaster(ICES_bathy,"ICES_bathy3",overwrite=TRUE)
+# plot(ICES_bathy)
+# 
+# file1<-nc_open("woa18_all_o00_01.nc")
+# O2<-ncvar_get(file1,varid="o_an",collapse_degen = FALSE)
+# Lat<-as.vector(ncvar_get(file1,varid="lat"))
+# Lon<-as.vector(ncvar_get(file1,varid="lon"))
+# Depth<-as.vector(ncvar_get(file1,varid="depth"))
+# Lon1<-rep(Lon,length(Lat)*length(Depth))
+# Lat1<-rep(rep(Lat,each=length(Lon)),length(Depth))
+# Depth1<-rep(rep(Depth,each=length(Lon)),each=length(Lat))
+# O2<-as.vector(ncvar_get(file1,varid="o_an"))
+# O2_data<-data.frame(Longitude=Lon1,Latitude=Lat1,Depth=Depth1)
+# t1<-which(O2_data$Latitude>=30&O2_data$Latitude<=87&O2_data$Longitude>=-80&O2_data$Longitude<=60)
+# O2_data<-data.frame(Longitude=Lon1[t1],Latitude=Lat1[t1],Depth=Depth1[t1],O2=O2[t1])
+# O2_data<-subset(O2_data,O2_data$O2>=0)
+# O2_depth<-aggregate(Depth~Longitude+Latitude,data=O2_data,FUN="min")
+# O2_data<-merge(O2_depth,O2_data,by=c("Longitude","Latitude","Depth"))
+# nc_close(file1)
+# 
+# O2.project<-SpatialPointsDataFrame(coords=c(O2_data["Longitude"],O2_data["Latitude"]),data=O2_data["O2"], proj4string=newproj) 
+# t1<-which(raster::extract(ICES_bathy,O2.project)>0)
+# O2.project<-O2.project[t1,]
+# 
+# #             Interpolate to raster
+# O2.idw<-gstat(id = "O2", formula = O2~1, data=O2.project, nmax=8, set=list(idp = 2.5))
+# O2.raster<-interpolate(ICES_bathy,O2.idw,overwrite=TRUE,xyOnly=TRUE,filename="O2raster", progress="text")
+# 
+# O2.raster<-mask(O2.raster,ICES_bathy,overwrite=TRUE, filename="O2raster2")
+# plot(O2.raster)
+# 
+# O2.raster<-aggregate(O2.raster,fact=2,filename="O2",FUN="mean",progress="text",overwrite=TRUE)
+# bathy<-aggregate(ICES_bathy,fact=2,filename="bathy",FUN="mean",progress="text",overwrite=TRUE)
 ```
 
+From the aggregated bathymetry two derived variables (slope and
+topographic position index) were calculated using the raster package
+(Hijmans 2019). The four explanatory variables are shown in Figure 2.
+
 ``` r
+#Download the depth, oxygen and ICES area rasters and polygon from the google drive
 temp <- tempfile(fileext = ".zip")
 drive_deauth()
 drive_download(as_id("1k0j9yTDFAme0zwxRLOJtrip3TXjKI9L6"), path = temp, overwrite = TRUE)
 unzip(temp,overwrite=TRUE)
 
+#Read in the raster layers and derive slope and TPI from the bathymerty
 ICES_bathy<-raster("./ICES_variables/bathy")
 ICES_slope<-terrain(ICES_bathy,opt="slope",progress="text",overwrite=TRUE)
 ICES_TPI<-terrain(ICES_bathy,opt="tpi",progress="text",overwrite=TRUE)
 O2.raster<-raster("./ICES_variables/O2")
 raster.stack<-stack(ICES_bathy,ICES_slope,ICES_TPI,O2.raster)
 names(raster.stack)<-c("bathy","slope","TPI","O2")
+#Extract the explanatory variables to the VME data locations
 variables<-data.frame(raster::extract(raster.stack,cbind(Acanth_arm$Longitude,Acanth_arm$Latitude)))
 Acanth_arm<-cbind(Acanth_arm,variables)
 variables<-subset(variables,variables$bathy>0)
 Acanth_arm<-subset(Acanth_arm,Acanth_arm$bathy>0)
 
+#Import the ICES region shapefile and subset to include only SubAreas 6-12
 newproj<-crs(ICES_bathy)
 ICES_regions<-readOGR("./ICES_variables/Shapefiles","ICES_Areas_20160601_cut_dense_3857")
-```
-
-    ## OGR data source with driver: ESRI Shapefile 
-    ## Source: "C:\Users\rooperc\Desktop\ICES_WKPHM_CR\ICES_variables\Shapefiles", layer: "ICES_Areas_20160601_cut_dense_3857"
-    ## with 66 features
-    ## It has 10 fields
-    ## Integer64 fields read as strings:  OBJECTID_1 OBJECTID
-
-``` r
 ICES_regions<-spTransform(ICES_regions,newproj)
 ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
+
+png("./Figures/Figure2.png",height=6,width=6,units="in",res=300)
+plot(raster.stack)
+dev.off()
 ```
+
+<div class="figure">
+
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Figure2.png" alt="Figure 2. Map of bathymetry, slope, TPI and Oxygen used as explanatory variables in this analysis of ICES VME data" width="1800" />
+
+<p class="caption">
+
+Figure 2. Map of bathymetry, slope, TPI and Oxygen used as explanatory
+variables in this analysis of ICES VME data
+
+</p>
+
+</div>
 
 ### Collinearity
 
-``` r
-plot(raster.stack)
-```
-
-![](Acanth_arm_code_files/figure-gfm/lookforcollinearity-1.png)<!-- -->
+The four explanatory variables were examined for collinearity using a
+pearson correlations (Figure 3). Variance inflation inflation factors
+(Zuur et al. 2002) were also examined. In both cases the values were
+low, suggesting that the variables were fairly independent of each
+other.
 
 ``` r
 cormat1<-cor(variables,use="complete.obs")
+png("./Figures/Figure3.png",width=6,height=6,units="in",res=300)
 corrplot(cormat1,method="number",type="lower")
+dev.off()
 ```
 
-![](Acanth_arm_code_files/figure-gfm/lookforcollinearity-2.png)<!-- -->
+    ## 
+    ## -------------------
+    ##   &nbsp;     GVIF  
+    ## ----------- -------
+    ##  **bathy**   1.235 
+    ## 
+    ##  **slope**   1.189 
+    ## 
+    ##   **TPI**    1.004 
+    ## 
+    ##   **O2**     1.112 
+    ## -------------------
 
-``` r
-print(corvif(variables))
-```
+<div class="figure">
 
-    ##           GVIF
-    ## bathy 1.234570
-    ## slope 1.188550
-    ## TPI   1.003658
-    ## O2    1.112178
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Figure3.png" alt="Figure 3. Correlation among independent variables used in modeling." width="1800" />
+
+<p class="caption">
+
+Figure 3. Correlation among independent variables used in modeling.
+
+</p>
+
+</div>
 
 ## Model building
 
+To build the model of *Acanthogorgia armata* a generalized linear model
+was constructed that contained four explanatory variables (depth, slope,
+topographic position index and oxygen). Up to second order polynomials
+were included and the dependent data was presence or absence of
+*Acanthogorgia armata*. The full model was
+
+\[y = \alpha+\beta_{1}depth+\beta_{2}slope+\beta_{3}TPI+\beta_{4}O_{2}+\beta_{5}depth^2+\beta_{6}slope^2+\beta_{7}TPI^2+\beta_{8}O_{2}^2+\sigma\]
+
 ### Model fitting
+
+A binomial error distribution (\(\sigma\)) was used for the model
+fitting. A full model was fit initially containing all the variables and
+polynomials. This model was reduced sequentially by removing the least
+significant term and comparing the AIC for the resulting reduced model.
+This was repeated until there was no reduction in AIC when removing a
+variable and all variables remaining in the model were significant.
+
+The results of the sequential variable reduction was the removal of the
+depth variable. Slope, TPI and Oxygen (and the polynomials for these
+variables) were all signficant.
 
 ``` r
 TableData<-data.frame(Fold=character(),AIC=numeric(),threshold=numeric(),AUC_training=numeric(),AUC_testing=numeric(),TSS_training=numeric(),TSS_testing=numeric(),Cor_training=numeric(),Cor_testing=numeric(),RMSE_training=numeric(),RMSE_testing=numeric(),stringsAsFactors=FALSE)
@@ -500,12 +604,12 @@ dev.off()
 
     ##          observed
     ## predicted    1    0
-    ##         1    8  121
-    ##         0    4 2854
+    ##         1   10  253
+    ##         0    4 2721
     ##          observed
     ## predicted   1   0
-    ##         1   4  27
-    ##         0   4 712
+    ##         1   4  65
+    ##         0   2 675
 
     ## [1] "height of tallest bar truncated to fit on plot"
 
@@ -514,12 +618,12 @@ dev.off()
 
     ##          observed
     ## predicted    1    0
-    ##         1   16  278
-    ##         0    2 2692
+    ##         1   16  208
+    ##         0    3 2761
     ##          observed
     ## predicted   1   0
-    ##         1   0  78
-    ##         0   2 666
+    ##         1   0  46
+    ##         0   1 699
 
     ## [1] "height of tallest bar truncated to fit on plot"
 
@@ -528,12 +632,12 @@ dev.off()
 
     ##          observed
     ## predicted    1    0
-    ##         1   14  275
-    ##         0    2 2695
+    ##         1   14  309
+    ##         0    4 2659
     ##          observed
     ## predicted   1   0
-    ##         1   3  69
-    ##         0   1 675
+    ##         1   2  86
+    ##         0   0 660
 
     ## [1] "height of tallest bar truncated to fit on plot"
 
@@ -542,12 +646,12 @@ dev.off()
 
     ##          observed
     ## predicted    1    0
-    ##         1   15  310
-    ##         0    3 2661
+    ##         1   11  270
+    ##         0    3 2703
     ##          observed
     ## predicted   1   0
-    ##         1   2  77
-    ##         0   0 666
+    ##         1   5  53
+    ##         0   1 688
 
     ## [1] "height of tallest bar truncated to fit on plot"
 
@@ -556,12 +660,12 @@ dev.off()
 
     ##          observed
     ## predicted    1    0
-    ##         1   13  273
-    ##         0    3 2697
+    ##         1   13  236
+    ##         0    2 2736
     ##          observed
     ## predicted   1   0
-    ##         1   3  73
-    ##         0   1 671
+    ##         1   3  67
+    ##         0   2 675
 
     ## [1] "height of tallest bar truncated to fit on plot"
 

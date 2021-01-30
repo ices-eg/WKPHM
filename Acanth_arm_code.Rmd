@@ -2,7 +2,8 @@
 title: "WKPHM Advice Template"
 author: "WKPHM"
 date: '`r format(Sys.Date(), "%B %d, %Y")`'
-output: github_document
+output: 
+  github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -22,6 +23,7 @@ library(AICcmodavg)
 library(gridExtra)
 library(viridis)
 library(googledrive)
+library(pander)
 source("VarianceInflationFactors.R")
 dir.create("Figures")
 dir.create("Predictions")
@@ -112,10 +114,10 @@ dev.off()
 
 ```
 
-
-```{r figure1, fig.cap="Locations of presence and absence observations for *Acanthogorgia armata* from the ICES database", echo=FALSE}
+```{r figure1, fig.cap="Figure 1. Locations of presence and absence observations for *Acanthogorgia armata* from the ICES database", echo=FALSE}
 knitr::include_graphics(here::here("./Figures/Figure1.png"))
 ```
+
 
 ## Explanatory variables
 
@@ -212,25 +214,47 @@ plot(raster.stack)
 dev.off()
 ```
 
-```{r figure2, fig.cap="Map of bathymetry, slope, TPI and Oxygen used as explanatory variables in this analysis of ICES VME data", echo=FALSE}
+```{r figure2, fig.cap="Figure 2. Map of bathymetry, slope, TPI and Oxygen used as explanatory variables in this analysis of ICES VME data", echo=FALSE}
 knitr::include_graphics(here::here("./Figures/Figure2.png"))
 ```
 
+
 ### Collinearity
 
-The four explanatory variables were examined for collinearity using a pearson correlations. 
+The four explanatory variables were examined for collinearity using a pearson correlations (Figure 3). Variance inflation inflation factors (Zuur et al. 2002) were also examined. In both cases the values were low, suggesting that the variables were fairly independent of each other.
 
-```{r lookforcollinearity,message=FALSE,warning=FALSE}
+```{r lookforcollinearity,message=FALSE,warning=FALSE,results='hide'}
 
 cormat1<-cor(variables,use="complete.obs")
+png("./Figures/Figure3.png",width=6,height=6,units="in",res=300)
 corrplot(cormat1,method="number",type="lower")
-print(corvif(variables))
+dev.off()
+```
 
+```{r table1, fig.cap="Table 1. Variance inflation factors for independent variables using in modeling.",echo=FALSE}
+pander::pandoc.table(corvif(variables))
+```
+
+```{r figure3, fig.cap="Figure 3. Correlation among independent variables used in modeling.", echo=FALSE}
+knitr::include_graphics(here::here("./Figures/Figure3.png"))
 ```
 
 ## Model building
 
+To build the model of *Acanthogorgia armata* a generalized linear model was constructed that contained four explanatory variables (depth, slope, topographic position index and oxygen). Up to second order polynomials were included and the dependent data was presence or absence of *Acanthogorgia armata*. The full model was
+
+
+$$y = \alpha+\beta_{1}depth+\beta_{2}slope+\beta_{3}TPI+\beta_{4}O_{2}+\beta_{5}depth^2+\beta_{6}slope^2+\beta_{7}TPI^2+\beta_{8}O_{2}^2+\sigma$$
+
+
 ### Model fitting
+
+A binomial error distribution ($\sigma$) was used for the model fitting. A full model was fit initially containing all the variables and polynomials. This model was reduced sequentially by removing the least significant term and comparing the AIC for the resulting reduced model. This was repeated until there was no reduction in AIC when removing a variable and all variables remaining in the model were significant. 
+
+The results of the sequential variable reduction was the removal of the depth variable. Slope, TPI and Oxygen (and the polynomials for these variables) were all signficant. 
+
+
+
 ```{r buildsimplemodel,message=FALSE,warning=FALSE}
 TableData<-data.frame(Fold=character(),AIC=numeric(),threshold=numeric(),AUC_training=numeric(),AUC_testing=numeric(),TSS_training=numeric(),TSS_testing=numeric(),Cor_training=numeric(),Cor_testing=numeric(),RMSE_training=numeric(),RMSE_testing=numeric(),stringsAsFactors=FALSE)
 
