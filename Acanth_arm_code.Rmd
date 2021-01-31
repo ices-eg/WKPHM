@@ -3,7 +3,8 @@ title: "WKPHM Advice Template"
 author: "WKPHM"
 date: '`r format(Sys.Date(), "%B %d, %Y")`'
 output: 
-  github_document
+  github_document:
+    pandoc_args: --webtex
 ---
 
 ```{r setup, include=FALSE}
@@ -14,7 +15,6 @@ library(ncdf4)
 library(rgdal)
 library(rgeos)
 library(gstat)
-library(maptools)
 library(raster)
 library(corrplot)
 library(dismo)
@@ -24,6 +24,8 @@ library(gridExtra)
 library(viridis)
 library(googledrive)
 library(pander)
+library(tinytex)
+library(knitr)
 source("VarianceInflationFactors.R")
 dir.create("Figures")
 dir.create("Predictions")
@@ -231,7 +233,8 @@ corrplot(cormat1,method="number",type="lower")
 dev.off()
 ```
 
-```{r table1, fig.cap="Table 1. Variance inflation factors for independent variables using in modeling.",echo=FALSE}
+Table 1. Variance inflation factors for independent variables using in modeling.
+```{r table1, echo=FALSE}
 pander::pandoc.table(corvif(variables))
 ```
 
@@ -244,26 +247,24 @@ knitr::include_graphics(here::here("./Figures/Figure3.png"))
 To build the model of *Acanthogorgia armata* a generalized linear model was constructed that contained four explanatory variables (depth, slope, topographic position index and oxygen). Up to second order polynomials were included and the dependent data was presence or absence of *Acanthogorgia armata*. The full model was
 
 
-$$y = \alpha+\beta_{1}depth+\beta_{2}slope+\beta_{3}TPI+\beta_{4}O_{2}+\beta_{5}depth^2+\beta_{6}slope^2+\beta_{7}TPI^2+\beta_{8}O_{2}^2+\sigma$$
+$$
+y = \alpha+\beta_{1}depth+\beta_{2}slope+\beta_{3}TPI+\beta_{4}O_{2}+\beta_{5}depth^2+\beta_{6}slope^2+\beta_{7}TPI^2+\beta_{8}O_{2}^2+\sigma
+$$
 
 
 ### Model fitting
 
 A binomial error distribution ($\sigma$) was used for the model fitting. A full model was fit initially containing all the variables and polynomials. This model was reduced sequentially by removing the least significant term and comparing the AIC for the resulting reduced model. This was repeated until there was no reduction in AIC when removing a variable and all variables remaining in the model were significant. 
 
-The results of the sequential variable reduction was the removal of the depth variable. Slope, TPI and Oxygen (and the polynomials for these variables) were all signficant. 
-
-
-
-```{r buildsimplemodel,message=FALSE,warning=FALSE}
+```{r buildsimplemodel,message=FALSE,warning=FALSE,results=FALSE}
 TableData<-data.frame(Fold=character(),AIC=numeric(),threshold=numeric(),AUC_training=numeric(),AUC_testing=numeric(),TSS_training=numeric(),TSS_testing=numeric(),Cor_training=numeric(),Cor_testing=numeric(),RMSE_training=numeric(),RMSE_testing=numeric(),stringsAsFactors=FALSE)
 
 Acanth.GLM.pa<-glm(Presence~bathy+slope+TPI+O2+I(bathy^2)+I(slope^2)+I(TPI^2)+I(O2^2),data=Acanth_arm,family=binomial)
-summary(Acanth.GLM.pa)
+#summary(Acanth.GLM.pa)
 
 #Stepwise reduction based on AIC
 Acanth.GLM.pa<-glm(Presence~slope+TPI+O2+I(slope^2)+I(TPI^2)+I(O2^2),data=Acanth_arm,family=binomial)
-summary(Acanth.GLM.pa)
+#summary(Acanth.GLM.pa)
 
 
 ######TEST THE PREDICTIONS AGAINST THE TRAINING DATA############################
@@ -275,14 +276,13 @@ TableData[1,4]<-round(auc(train.auc_data,na.rm=TRUE)[1],3)
 TableData[1,10]<-round(sqrt(mean((train.auc_data$X2-train.auc_data$X3)^2)),3)
 #Calculate the TSS
 train.threshold<-optimal.thresholds(train.auc_data,opt.methods=3)[1,2]
+train.threshold<-0.006 #needed threshold out to 3 digits
 TableData[1,3]<-train.threshold
 TableData[1,6]<-round(sensitivity(cmx(train.auc_data,threshold=train.threshold))+specificity(cmx(train.auc_data,threshold=train.threshold))-1,3)[1]
 #Calculate the Spearmans Rank correlation
 TableData[1,8]<-round(cor.test(train.auc_data[,2],train.auc_data[,3],method="spearman")$estimate,3)
 #AIC
 TableData[1,2]<-Acanth.GLM.pa$aic
-
-print(cmx(train.auc_data,threshold=train.threshold))
 
 #RESPONSE CURVE PLOTS
 ## generate prediction frame
@@ -319,11 +319,40 @@ calibration.plot(train.auc_data,N.bins=10,xlab="Predicted occurence",ylab="Propo
 presence.absence.hist(train.auc_data,truncate.tallest=TRUE,main="",ylab="Number of observations",xlab="Predicted probability")
 dev.off()
 
-
 ```
 
+The results of the sequential variable reduction was the removal of the depth variable. Slope, TPI and Oxygen (and the polynomials for these variables) were all signficant. The deviance explained by the model ($D^2$) was `r round(1-(Acanth.GLM.pa$deviance/Acanth.GLM.pa$null.deviance),3)`. 
+
+Table 2. Summary of GLM model predicting presence or absence of Acanthogorgia armata.
+```{r table2, echo=FALSE,warning=FALSE}
+knitr::kable(anova(Acanth.GLM.pa), digits = 3, format = "pandoc")
+```
+
+The partial response curves showed a dome shaped response for all three of the significant variables. Peak probability of presence was predicted at Oxygen levels of 250 ml/L, at moderat slopes > 0.2 and at areas that were slightly elevated from its surrounding bathymetry (on hills).
+
+```{r responsefig, fig.cap="Figure 3. Correlation among independent variables used in modeling.", echo=FALSE}
+knitr::include_graphics(here::here("./Figures/response_curvesFull.png"))
+```
+
+Model diagnostics indicated some issues with the prediction of presence or absence.The probability of presence in this 
+
+```{r diagnosfig, fig.cap="Figure 3. Model diagnostic plots for Acanthogorgia armata presence or absence GLM.", echo=FALSE}
+knitr::include_graphics(here::here("./Figures/GLMdiagnosticsFull.png"))
+```
+
+Using a threshold of 0.006 resulted in prediction of 3 of the 20 observed presences correctly, while predicting about 88% of the absences correctly.  
+Table 3. Confusion matrix of predicted and observed presence and absence of *Acanthogorgia armata* using a probability threshold of 0.006.
+```{r table3, echo=FALSE}
+print(cmx(train.auc_data,threshold=train.threshold))
+```
+
+
+
 ### Model predictions
-```{r simplemodelpredictions,message=FALSE,warning=FALSE, cache=TRUE}
+
+Model predictions were generated on maps using the rasters of oxygen, slope, and TPI and the predict function for the GLM model.  
+
+```{r simplemodelpredictions,message=FALSE,warning=FALSE, results='hide',cache=TRUE}
 
 #######MAKE THE PREDICTION RASTER ##############################################
 #Predict the model to a raster to see where suitable habitat is predicted
@@ -337,9 +366,19 @@ dev.off()
 
 ```
 
+The model predicted that the highest probability of presence for *Acanthogorgia armata* was in a band from 40-60 degrees North latitude and along areas of moderate slope.
+
+```{r predictionmapfig, fig.cap="Figure 4. Predicted probability of presence for Arthrogorgia armata in SubAreas 6-12.", echo=FALSE}
+knitr::include_graphics(here::here("./Figures/ProbabilityMapFull.png"))
+```
+
+
+
 ## Model validation
 
-```{r simplemodelvalidation,message=FALSE,warning=FALSE, cache=TRUE}
+In this simple demonstration, the model validation was completed using 5-folds of randomly selected subsets of the data. The data was divided into 5 equal portions and a model then fit to 80% of the data and tested against the remaining 20% of the data. This was repeated for each subdivision of the data. The same maps and diagnostics were produced for each model fit on the k-folds. 
+
+```{r simplemodelvalidation,message=FALSE,warning=FALSE, results='hide',cache=TRUE}
 ##Sample training and testing data sets####
 Acanth_arm$Group<-kfold(Acanth_arm,k=5)
 
@@ -365,6 +404,7 @@ TableData[i+1,4]<-round(auc(train.auc_dataf,na.rm=TRUE)[1],3)
 TableData[i+1,10]<-round(sqrt(mean((train.auc_dataf$X2-train.auc_dataf$X3)^2)),3)
 #Calculate the TSS
 train.thresholdf<-optimal.thresholds(train.auc_dataf,opt.methods=3)[1,2]
+train.thresholdf<-0.006
 TableData[i+1,3]<-train.thresholdf
 TableData[i+1,6]<-round(sensitivity(cmx(train.auc_dataf,threshold=train.thresholdf))+specificity(cmx(train.auc_dataf,threshold=train.thresholdf))-1,3)[1]
 #Calculate the Spearmans Rank correlation
@@ -387,7 +427,7 @@ TableData[i+1,7]<-round(sensitivity(cmx(test.auc_dataf,threshold=train.threshold
 #Calculate the Spearmans Rank correlation
 TableData[i+1,9]<-round(cor.test(test.auc_dataf[,2],test.auc_dataf[,3],method="spearman")$estimate,3)
 
-print(cmx(test.auc_dataf,threshold=train.thresholdf))
+#print(cmx(test.auc_dataf,threshold=train.thresholdf))
 
 #RESPONSE CURVE PLOTS
 ## generate prediction frame
@@ -434,12 +474,31 @@ dev.off()
 
 ```
 
+The data folds appeared to show the same patterns as the full model. Relatively high probabilities of presence were apparent in a band from 40-50 North Latitude.
+
+
+```{r foldfigsr, echo=FALSE,out.width="49%", out.height="33%",fig.show='hold',fig.align='center',fig.cap="Figure 5. Maps of model predictions for 5 randomly selected folds of the data."}
+knitr::include_graphics(c("./Figures/ProbabilityMapFold1.png","./Figures/ProbabilityMapFold2.png","./Figures/ProbabilityMapFold3.png","./Figures/ProbabilityMapFold4.png","./Figures/ProbabilityMapFold5.png"))
+```
+
+The model performance was similar for all the training data sets (the full model and the individual folds). However the performance of the model on the testing folds was less impressive. For example, the True Skill Statistic for model folds 2 and 5 was very poor, indicating some potential issues with model performance.  
+
+Table 5. Model goodness of fit measures for the full model and the individual model validation folds
+```{r table5, echo=FALSE,warning=FALSE}
+pander::pandoc.table(TableData)
+```
+
 
 ## Model uncertainty
 
+Model uncertainty was shown here by plotting the spatial pattern of model residuals and by examining the error patterns for the predictions as an indicator of model confidence.
+
 ### Spatial patterns in residuals
 
-```{r mapmodeluncertainty,message=FALSE,warning=FALSE, cache=TRUE}
+Here the model residuals (on the logit scale are shown for each data point used to model *Acanthogorgia armata*. This version is not useful.
+
+
+```{r mapmodeluncertainty,message=FALSE,warning=FALSE, results='hide',cache=TRUE}
 ##################################################################
 
 Acanth.GLM.padata<-subset(Acanth.GLM.pa$data,Acanth.GLM.pa$data$slope>=0)
@@ -466,8 +525,15 @@ p<-ggplot()+
 png(filename="./Figures/Residuals.png",width=6,height=7,res=300,units="in")
 print(p)
 dev.off()
+```
 
+```{r residualmapfig, fig.cap="Figure 6. Spatial patterns in model residuals for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12.", echo=FALSE}
+knitr::include_graphics(here::here("./Figures/Residuals.png"))
+```
 
+The SE of the individual model fold predictiosn was also calculated and plot it.
+
+```{r mapseofpredictions,message=FALSE,warning=FALSE,cache=TRUE,results='hide'}
 #Calculate prediction error and SE
 
 F1<-raster("./Predictions/GLMFold1")
@@ -486,4 +552,7 @@ dev.off()
 
 ```
 
+```{r semapfig, fig.cap="Figure 7. Spatial patterns in model prediction error for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12.", echo=FALSE}
+knitr::include_graphics(here::here("./Figures/Fullmapse.png"))
+```
 

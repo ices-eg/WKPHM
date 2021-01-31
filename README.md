@@ -272,6 +272,9 @@ corrplot(cormat1,method="number",type="lower")
 dev.off()
 ```
 
+Table 1. Variance inflation factors for independent variables using in
+modeling.
+
     ## 
     ## -------------------
     ##   &nbsp;     GVIF  
@@ -305,97 +308,37 @@ topographic position index and oxygen). Up to second order polynomials
 were included and the dependent data was presence or absence of
 *Acanthogorgia armata*. The full model was
 
-\[y = \alpha+\beta_{1}depth+\beta_{2}slope+\beta_{3}TPI+\beta_{4}O_{2}+\beta_{5}depth^2+\beta_{6}slope^2+\beta_{7}TPI^2+\beta_{8}O_{2}^2+\sigma\]
+  
+![
+y =
+\\alpha+\\beta\_{1}depth+\\beta\_{2}slope+\\beta\_{3}TPI+\\beta\_{4}O\_{2}+\\beta\_{5}depth^2+\\beta\_{6}slope^2+\\beta\_{7}TPI^2+\\beta\_{8}O\_{2}^2+\\sigma
+](https://latex.codecogs.com/png.latex?%0Ay%20%3D%20%5Calpha%2B%5Cbeta_%7B1%7Ddepth%2B%5Cbeta_%7B2%7Dslope%2B%5Cbeta_%7B3%7DTPI%2B%5Cbeta_%7B4%7DO_%7B2%7D%2B%5Cbeta_%7B5%7Ddepth%5E2%2B%5Cbeta_%7B6%7Dslope%5E2%2B%5Cbeta_%7B7%7DTPI%5E2%2B%5Cbeta_%7B8%7DO_%7B2%7D%5E2%2B%5Csigma%0A
+"
+y = \\alpha+\\beta_{1}depth+\\beta_{2}slope+\\beta_{3}TPI+\\beta_{4}O_{2}+\\beta_{5}depth^2+\\beta_{6}slope^2+\\beta_{7}TPI^2+\\beta_{8}O_{2}^2+\\sigma
+")  
 
 ### Model fitting
 
-A binomial error distribution (\(\sigma\)) was used for the model
-fitting. A full model was fit initially containing all the variables and
-polynomials. This model was reduced sequentially by removing the least
-significant term and comparing the AIC for the resulting reduced model.
-This was repeated until there was no reduction in AIC when removing a
-variable and all variables remaining in the model were significant.
-
-The results of the sequential variable reduction was the removal of the
-depth variable. Slope, TPI and Oxygen (and the polynomials for these
-variables) were all signficant.
+A binomial error distribution
+(![\\sigma](https://latex.codecogs.com/png.latex?%5Csigma "\\sigma"))
+was used for the model fitting. A full model was fit initially
+containing all the variables and polynomials. This model was reduced
+sequentially by removing the least significant term and comparing the
+AIC for the resulting reduced model. This was repeated until there was
+no reduction in AIC when removing a variable and all variables remaining
+in the model were significant.
 
 ``` r
 TableData<-data.frame(Fold=character(),AIC=numeric(),threshold=numeric(),AUC_training=numeric(),AUC_testing=numeric(),TSS_training=numeric(),TSS_testing=numeric(),Cor_training=numeric(),Cor_testing=numeric(),RMSE_training=numeric(),RMSE_testing=numeric(),stringsAsFactors=FALSE)
 
 Acanth.GLM.pa<-glm(Presence~bathy+slope+TPI+O2+I(bathy^2)+I(slope^2)+I(TPI^2)+I(O2^2),data=Acanth_arm,family=binomial)
-summary(Acanth.GLM.pa)
-```
+#summary(Acanth.GLM.pa)
 
-    ## 
-    ## Call:
-    ## glm(formula = Presence ~ bathy + slope + TPI + O2 + I(bathy^2) + 
-    ##     I(slope^2) + I(TPI^2) + I(O2^2), family = binomial, data = Acanth_arm)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -0.8506  -0.0609  -0.0391  -0.0085   3.5760  
-    ## 
-    ## Coefficients:
-    ##               Estimate Std. Error z value Pr(>|z|)    
-    ## (Intercept) -6.008e+02  1.485e+02  -4.046 5.21e-05 ***
-    ## bathy       -1.051e-04  8.873e-04  -0.118 0.905718    
-    ## slope        7.828e+01  2.131e+01   3.673 0.000240 ***
-    ## TPI          6.872e-02  3.265e-02   2.104 0.035344 *  
-    ## O2           4.754e+00  1.174e+00   4.051 5.10e-05 ***
-    ## I(bathy^2)  -5.258e-08  2.295e-07  -0.229 0.818759    
-    ## I(slope^2)  -4.595e+02  1.343e+02  -3.422 0.000621 ***
-    ## I(TPI^2)    -2.806e-03  1.181e-03  -2.376 0.017503 *  
-    ## I(O2^2)     -9.467e-03  2.313e-03  -4.092 4.27e-05 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
-    ##     Null deviance: 249.07  on 3733  degrees of freedom
-    ## Residual deviance: 171.70  on 3725  degrees of freedom
-    ##   (4 observations deleted due to missingness)
-    ## AIC: 189.7
-    ## 
-    ## Number of Fisher Scoring iterations: 12
-
-``` r
 #Stepwise reduction based on AIC
 Acanth.GLM.pa<-glm(Presence~slope+TPI+O2+I(slope^2)+I(TPI^2)+I(O2^2),data=Acanth_arm,family=binomial)
-summary(Acanth.GLM.pa)
-```
+#summary(Acanth.GLM.pa)
 
-    ## 
-    ## Call:
-    ## glm(formula = Presence ~ slope + TPI + O2 + I(slope^2) + I(TPI^2) + 
-    ##     I(O2^2), family = binomial, data = Acanth_arm)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -0.7619  -0.0595  -0.0392  -0.0089   3.6151  
-    ## 
-    ## Coefficients:
-    ##               Estimate Std. Error z value Pr(>|z|)    
-    ## (Intercept) -5.603e+02  1.400e+02  -4.003 6.26e-05 ***
-    ## slope        7.706e+01  1.980e+01   3.893 9.92e-05 ***
-    ## TPI          6.863e-02  3.257e-02   2.107 0.035107 *  
-    ## O2           4.428e+00  1.105e+00   4.008 6.12e-05 ***
-    ## I(slope^2)  -4.568e+02  1.320e+02  -3.461 0.000537 ***
-    ## I(TPI^2)    -2.718e-03  1.161e-03  -2.342 0.019201 *  
-    ## I(O2^2)     -8.816e-03  2.176e-03  -4.051 5.10e-05 ***
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
-    ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
-    ##     Null deviance: 249.07  on 3733  degrees of freedom
-    ## Residual deviance: 173.02  on 3727  degrees of freedom
-    ##   (4 observations deleted due to missingness)
-    ## AIC: 187.02
-    ## 
-    ## Number of Fisher Scoring iterations: 12
 
-``` r
 ######TEST THE PREDICTIONS AGAINST THE TRAINING DATA############################
 TableData[1,1]<-"Full model"
 train.auc_data<-data.frame(cbind(seq(1,length(Acanth.GLM.pa$y),1),Acanth.GLM.pa$y,Acanth.GLM.pa$fitted.values))
@@ -405,6 +348,7 @@ TableData[1,4]<-round(auc(train.auc_data,na.rm=TRUE)[1],3)
 TableData[1,10]<-round(sqrt(mean((train.auc_data$X2-train.auc_data$X3)^2)),3)
 #Calculate the TSS
 train.threshold<-optimal.thresholds(train.auc_data,opt.methods=3)[1,2]
+train.threshold<-0.006 #needed threshold out to 3 digits
 TableData[1,3]<-train.threshold
 TableData[1,6]<-round(sensitivity(cmx(train.auc_data,threshold=train.threshold))+specificity(cmx(train.auc_data,threshold=train.threshold))-1,3)[1]
 #Calculate the Spearmans Rank correlation
@@ -412,15 +356,6 @@ TableData[1,8]<-round(cor.test(train.auc_data[,2],train.auc_data[,3],method="spe
 #AIC
 TableData[1,2]<-Acanth.GLM.pa$aic
 
-print(cmx(train.auc_data,threshold=train.threshold))
-```
-
-    ##          observed
-    ## predicted    1    0
-    ##         1   17  346
-    ##         0    3 3368
-
-``` r
 #RESPONSE CURVE PLOTS
 ## generate prediction frame
 TPIframe <- data.frame(TPI=seq(min(Acanth_arm$TPI,na.rm=TRUE),max(Acanth_arm$TPI,na.rm=TRUE),length=51),O2=median(Acanth_arm$O2,na.rm=TRUE),slope=median(Acanth_arm$slope,na.rm=TRUE))
@@ -446,67 +381,121 @@ p2<-ggplot(slopeframe)+geom_ribbon(aes(x=slope,ymin=predicted-se.fit,ymax=predic
 png("./Figures/response_curvesFull.png",width=8,height=6,units="in",res=300)
 grid.arrange(p1,p2,p3,ncol=1)
 dev.off()
-```
 
-    ## png 
-    ##   2
-
-``` r
 ####FIGURE 3 - MAXENT DIAGNOSTICS PLOTS
 #Plots for data
 png(filename="./Figures/GLMdiagnosticsFull.png",width=6,height=6,res=300,units="in")
 par(mfcol=c(2,2),family="sans",mar=c(4,4,1,.01))
 auc.roc.plot(train.auc_data,opt.methods=2,main="",add.legend=F,xlab="Specificity",ylab="Sensitivity",add.opt.legend=F)
 calibration.plot(train.auc_data,N.bins=10,xlab="Predicted occurence",ylab="Proportion of observed occurence",main="")
-```
-
-    ##    BinCenter NBin      BinObs     BinPred BinObsCIlower BinObsCIupper
-    ## 1       0.05 3693 0.004332521 0.003814336   0.002478376   0.007026232
-    ## 2       0.15   36 0.083333333 0.131696602   0.017526496   0.224689761
-    ## 3       0.25    5 0.200000000 0.234516165   0.005050763   0.716417936
-    ## 4       0.35    0          NA          NA            NA            NA
-    ## 5       0.45    0          NA          NA            NA            NA
-    ## 6       0.55    0          NA          NA            NA            NA
-    ## 7       0.65    0          NA          NA            NA            NA
-    ## 8       0.75    0          NA          NA            NA            NA
-    ## 9       0.85    0          NA          NA            NA            NA
-    ## 10      0.95    0          NA          NA            NA            NA
-
-``` r
 presence.absence.hist(train.auc_data,truncate.tallest=TRUE,main="",ylab="Number of observations",xlab="Predicted probability")
-```
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-``` r
 dev.off()
 ```
 
-    ## png 
-    ##   2
+The results of the sequential variable reduction was the removal of the
+depth variable. Slope, TPI and Oxygen (and the polynomials for these
+variables) were all signficant. The deviance explained by the model
+(![D^2](https://latex.codecogs.com/png.latex?D%5E2 "D^2")) was 0.305.
+
+Table 2. Summary of GLM model predicting presence or absence of
+Acanthogorgia armata.
+
+|            | Df | Deviance | Resid. Df | Resid. Dev |
+| ---------- | -: | -------: | --------: | ---------: |
+| NULL       | NA |       NA |      3733 |    249.073 |
+| slope      |  1 |    0.509 |      3732 |    248.564 |
+| TPI        |  1 |    0.423 |      3731 |    248.141 |
+| O2         |  1 |   24.018 |      3730 |    224.123 |
+| I(slope^2) |  1 |   20.010 |      3729 |    204.113 |
+| I(TPI^2)   |  1 |   13.174 |      3728 |    190.938 |
+| I(O2^2)    |  1 |   17.918 |      3727 |    173.020 |
+
+The partial response curves showed a dome shaped response for all three
+of the significant variables. Peak probability of presence was predicted
+at Oxygen levels of 250 ml/L, at moderat slopes \> 0.2 and at areas that
+were slightly elevated from its surrounding bathymetry (on hills).
+
+<div class="figure">
+
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/response_curvesFull.png" alt="Figure 3. Correlation among independent variables used in modeling." width="2400" />
+
+<p class="caption">
+
+Figure 3. Correlation among independent variables used in modeling.
+
+</p>
+
+</div>
+
+Model diagnostics indicated some issues with the prediction of presence
+or absence.The probability of presence in this
+
+<div class="figure">
+
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/GLMdiagnosticsFull.png" alt="Figure 3. Model diagnostic plots for Acanthogorgia armata presence or absence GLM." width="1800" />
+
+<p class="caption">
+
+Figure 3. Model diagnostic plots for Acanthogorgia armata presence or
+absence GLM.
+
+</p>
+
+</div>
+
+Using a threshold of 0.006 resulted in prediction of 3 of the 20
+observed presences correctly, while predicting about 88% of the absences
+correctly.  
+Table 3. Confusion matrix of predicted and observed presence and absence
+of *Acanthogorgia armata* using a probability threshold of 0.006.
+
+    ##          observed
+    ## predicted    1    0
+    ##         1   17  446
+    ##         0    3 3268
 
 ### Model predictions
+
+Model predictions were generated on maps using the rasters of oxygen,
+slope, and TPI and the predict function for the GLM model.
 
 ``` r
 #######MAKE THE PREDICTION RASTER ##############################################
 #Predict the model to a raster to see where suitable habitat is predicted
 Acanth.GLM.pa.raster<-predict(raster.stack, Acanth.GLM.pa,filename="./Predictions/GLMFull",fun=predict, na.rm=TRUE,overwrite=TRUE,progress="text",type="response",newdata.guaranteed=TRUE)
-```
 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
-    ## 
 
-``` r
 png(filename="./Figures/ProbabilityMapFull.png",width=6,height=6.5,res=300,units="in")
 par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
 plot(Acanth.GLM.pa.raster, main = "", box=F,col = viridis(255),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Probability of presence",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
 dev.off()
 ```
 
-    ## png 
-    ##   2
+The model predicted that the highest probability of presence for
+*Acanthogorgia armata* was in a band from 40-60 degrees North latitude
+and along areas of moderate slope.
+
+<div class="figure">
+
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/ProbabilityMapFull.png" alt="Figure 4. Predicted probability of presence for Arthrogorgia armata in SubAreas 6-12." width="1800" />
+
+<p class="caption">
+
+Figure 4. Predicted probability of presence for Arthrogorgia armata in
+SubAreas 6-12.
+
+</p>
+
+</div>
 
 ## Model validation
+
+In this simple demonstration, the model validation was completed using
+5-folds of randomly selected subsets of the data. The data was divided
+into 5 equal portions and a model then fit to 80% of the data and tested
+against the remaining 20% of the data. This was repeated for each
+subdivision of the data. The same maps and diagnostics were produced for
+each model fit on the k-folds.
 
 ``` r
 ##Sample training and testing data sets####
@@ -534,6 +523,7 @@ TableData[i+1,4]<-round(auc(train.auc_dataf,na.rm=TRUE)[1],3)
 TableData[i+1,10]<-round(sqrt(mean((train.auc_dataf$X2-train.auc_dataf$X3)^2)),3)
 #Calculate the TSS
 train.thresholdf<-optimal.thresholds(train.auc_dataf,opt.methods=3)[1,2]
+train.thresholdf<-0.006
 TableData[i+1,3]<-train.thresholdf
 TableData[i+1,6]<-round(sensitivity(cmx(train.auc_dataf,threshold=train.thresholdf))+specificity(cmx(train.auc_dataf,threshold=train.thresholdf))-1,3)[1]
 #Calculate the Spearmans Rank correlation
@@ -556,7 +546,7 @@ TableData[i+1,7]<-round(sensitivity(cmx(test.auc_dataf,threshold=train.threshold
 #Calculate the Spearmans Rank correlation
 TableData[i+1,9]<-round(cor.test(test.auc_dataf[,2],test.auc_dataf[,3],method="spearman")$estimate,3)
 
-print(cmx(test.auc_dataf,threshold=train.thresholdf))
+#print(cmx(test.auc_dataf,threshold=train.thresholdf))
 
 #RESPONSE CURVE PLOTS
 ## generate prediction frame
@@ -602,79 +592,78 @@ dev.off()
 }
 ```
 
-    ##          observed
-    ## predicted    1    0
-    ##         1   10  253
-    ##         0    4 2721
-    ##          observed
-    ## predicted   1   0
-    ##         1   4  65
-    ##         0   2 675
+The data folds appeared to show the same patterns as the full model.
+Relatively high probabilities of presence were apparent in a band from
+40-50 North Latitude.
 
-    ## [1] "height of tallest bar truncated to fit on plot"
+<div class="figure" style="text-align: center">
 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
+<img src="./Figures/ProbabilityMapFold1.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="./Figures/ProbabilityMapFold2.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="./Figures/ProbabilityMapFold3.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="./Figures/ProbabilityMapFold4.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="./Figures/ProbabilityMapFold5.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" />
+
+<p class="caption">
+
+Figure 5. Maps of model predictions for 5 randomly selected folds of the
+data.
+
+</p>
+
+</div>
+
+The model performance was similar for all the training data sets (the
+full model and the individual folds). However the performance of the
+model on the testing folds was less impressive. For example, the True
+Skill Statistic for model folds 2 and 5 was very poor, indicating some
+potential issues with model performance.
+
+Table 5. Model goodness of fit measures for the full model and the
+individual model validation folds
+
     ## 
-
-    ##          observed
-    ## predicted    1    0
-    ##         1   16  208
-    ##         0    3 2761
-    ##          observed
-    ## predicted   1   0
-    ##         1   0  46
-    ##         0   1 699
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
+    ## ----------------------------------------------------------------------------
+    ##     Fold       AIC    threshold   AUC_training   AUC_testing   TSS_training 
+    ## ------------ ------- ----------- -------------- ------------- --------------
+    ##  Full model    187      0.006        0.946           NA            0.73     
     ## 
-
-    ##          observed
-    ## predicted    1    0
-    ##         1   14  309
-    ##         0    4 2659
-    ##          observed
-    ## predicted   1   0
-    ##         1   2  86
-    ##         0   0 660
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
+    ##  GLMFold_1    141.1     0.006        0.942          0.934         0.745     
     ## 
-
-    ##          observed
-    ## predicted    1    0
-    ##         1   11  270
-    ##         0    3 2703
-    ##          observed
-    ## predicted   1   0
-    ##         1   5  53
-    ##         0   1 688
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
+    ##  GLMFold_2    168.2     0.006        0.949          0.821         0.773     
     ## 
-
-    ##          observed
-    ## predicted    1    0
-    ##         1   13  236
-    ##         0    2 2736
-    ##          observed
-    ## predicted   1   0
-    ##         1   3  67
-    ##         0   2 675
-
-    ## [1] "height of tallest bar truncated to fit on plot"
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |============                                                          |  17%  |                                                                              |=======================                                               |  33%  |                                                                              |===================================                                   |  50%  |                                                                              |===============================================                       |  67%  |                                                                              |==========================================================            |  83%  |                                                                              |======================================================================| 100%
+    ##  GLMFold_3    167.5     0.006        0.944          0.959         0.808     
     ## 
+    ##  GLMFold_4    138.9     0.006        0.942          0.947         0.735     
+    ## 
+    ##  GLMFold_5    138.1     0.006        0.963          0.88          0.755     
+    ## ----------------------------------------------------------------------------
+    ## 
+    ## Table: Table continues below
+    ## 
+    ##  
+    ## -------------------------------------------------------------------------
+    ##  TSS_testing   Cor_training   Cor_testing   RMSE_training   RMSE_testing 
+    ## ------------- -------------- ------------- --------------- --------------
+    ##      NA           0.113           NA            0.071            NA      
+    ## 
+    ##     0.713         0.105          0.134          0.067          0.086     
+    ## 
+    ##    -0.118         0.124          0.041          0.077          0.042     
+    ## 
+    ##     0.849         0.119          0.082          0.075          0.051     
+    ## 
+    ##     0.731         0.105          0.138          0.066          0.087     
+    ## 
+    ##     0.472         0.113          0.107          0.069          0.081     
+    ## -------------------------------------------------------------------------
 
 ## Model uncertainty
 
+Model uncertainty was shown here by plotting the spatial pattern of
+model residuals and by examining the error patterns for the predictions
+as an indicator of model confidence.
+
 ### Spatial patterns in residuals
+
+Here the model residuals (on the logit scale are shown for each data
+point used to model *Acanthogorgia armata*. This version is not useful.
 
 ``` r
 ##################################################################
@@ -705,8 +694,21 @@ print(p)
 dev.off()
 ```
 
-    ## png 
-    ##   2
+<div class="figure">
+
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Residuals.png" alt="Figure 6. Spatial patterns in model residuals for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
+
+<p class="caption">
+
+Figure 6. Spatial patterns in model residuals for GLM predicting
+probability of Acanthogorgia armata in SubAreas 6-12.
+
+</p>
+
+</div>
+
+The SE of the individual model fold predictiosn was also calculated and
+plot it.
 
 ``` r
 #Calculate prediction error and SE
@@ -726,5 +728,15 @@ plot(Prediction.se, main = "", box=F,col = colorRampPalette(c("darkgreen","coral
 dev.off()
 ```
 
-    ## png 
-    ##   2
+<div class="figure">
+
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Fullmapse.png" alt="Figure 6. Spatial patterns in model prediction error for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
+
+<p class="caption">
+
+Figure 6. Spatial patterns in model prediction error for GLM predicting
+probability of Acanthogorgia armata in SubAreas 6-12.
+
+</p>
+
+</div>
