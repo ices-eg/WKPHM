@@ -1,7 +1,7 @@
 WKPHM Advice Template
 ================
 WKPHM
-January 30, 2021
+January 31, 2021
 
 ## Purpose
 
@@ -730,11 +730,11 @@ dev.off()
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Fullmapse.png" alt="Figure 6. Spatial patterns in model prediction error for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Fullmapse.png" alt="Figure 7. Spatial patterns in model prediction error for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
 
 <p class="caption">
 
-Figure 6. Spatial patterns in model prediction error for GLM predicting
+Figure 7. Spatial patterns in model prediction error for GLM predicting
 probability of Acanthogorgia armata in SubAreas 6-12.
 
 </p>
