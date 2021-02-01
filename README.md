@@ -107,14 +107,14 @@ p<-ggplot()+
   theme_dark()+
   theme(panel.grid = element_blank())
 
-png("./Figures/Figure1.png",height=6,width=6,unit="in",res=300)
+png("Figures/Figure1.png",height=6,width=6,unit="in",res=300)
 print(p)
 dev.off()
 ```
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Figure1.png" alt="Figure 1. Locations of presence and absence observations for *Acanthogorgia armata* from the ICES database" width="1800" />
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Figure1.png" alt="Figure 1. Locations of presence and absence observations for *Acanthogorgia armata* from the ICES database" width="1800" />
 
 <p class="caption">
 
@@ -221,10 +221,10 @@ drive_download(as_id("1k0j9yTDFAme0zwxRLOJtrip3TXjKI9L6"), path = temp, overwrit
 unzip(temp,overwrite=TRUE)
 
 #Read in the raster layers and derive slope and TPI from the bathymerty
-ICES_bathy<-raster("./ICES_variables/bathy")
+ICES_bathy<-raster("ICES_variables/bathy")
 ICES_slope<-terrain(ICES_bathy,opt="slope",progress="text",overwrite=TRUE)
 ICES_TPI<-terrain(ICES_bathy,opt="tpi",progress="text",overwrite=TRUE)
-O2.raster<-raster("./ICES_variables/O2")
+O2.raster<-raster("ICES_variables/O2")
 raster.stack<-stack(ICES_bathy,ICES_slope,ICES_TPI,O2.raster)
 names(raster.stack)<-c("bathy","slope","TPI","O2")
 #Extract the explanatory variables to the VME data locations
@@ -235,18 +235,18 @@ Acanth_arm<-subset(Acanth_arm,Acanth_arm$bathy>0)
 
 #Import the ICES region shapefile and subset to include only SubAreas 6-12
 newproj<-crs(ICES_bathy)
-ICES_regions<-readOGR("./ICES_variables/Shapefiles","ICES_Areas_20160601_cut_dense_3857")
+ICES_regions<-readOGR("ICES_variables/Shapefiles","ICES_Areas_20160601_cut_dense_3857")
 ICES_regions<-spTransform(ICES_regions,newproj)
 ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
 
-png("./Figures/Figure2.png",height=6,width=6,units="in",res=300)
+png("Figures/Figure2.png",height=6,width=6,units="in",res=300)
 plot(raster.stack)
 dev.off()
 ```
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Figure2.png" alt="Figure 2. Map of bathymetry, slope, TPI and Oxygen used as explanatory variables in this analysis of ICES VME data" width="1800" />
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Figure2.png" alt="Figure 2. Map of bathymetry, slope, TPI and Oxygen used as explanatory variables in this analysis of ICES VME data" width="1800" />
 
 <p class="caption">
 
@@ -267,7 +267,7 @@ other.
 
 ``` r
 cormat1<-cor(variables,use="complete.obs")
-png("./Figures/Figure3.png",width=6,height=6,units="in",res=300)
+png("Figures/Figure3.png",width=6,height=6,units="in",res=300)
 corrplot(cormat1,method="number",type="lower")
 dev.off()
 ```
@@ -290,7 +290,7 @@ modeling.
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Figure3.png" alt="Figure 3. Correlation among independent variables used in modeling." width="1800" />
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Figure3.png" alt="Figure 3. Correlation among independent variables used in modeling." width="1800" />
 
 <p class="caption">
 
@@ -378,13 +378,13 @@ slopeframe$se.fit <- predict(Acanth.GLM.pa,newdata=slopeframe,type="response",se
 p2<-ggplot(slopeframe)+geom_ribbon(aes(x=slope,ymin=predicted-se.fit,ymax=predicted+se.fit),fill="grey70") + geom_line(aes(x=slope,y=predicted))+xlab("Slope")+ylab("Probability of presence")
 
 #plot it
-png("./Figures/response_curvesFull.png",width=8,height=6,units="in",res=300)
+png("Figures/response_curvesFull.png",width=8,height=6,units="in",res=300)
 grid.arrange(p1,p2,p3,ncol=1)
 dev.off()
 
 ####FIGURE 3 - MAXENT DIAGNOSTICS PLOTS
 #Plots for data
-png(filename="./Figures/GLMdiagnosticsFull.png",width=6,height=6,res=300,units="in")
+png(filename="Figures/GLMdiagnosticsFull.png",width=6,height=6,res=300,units="in")
 par(mfcol=c(2,2),family="sans",mar=c(4,4,1,.01))
 auc.roc.plot(train.auc_data,opt.methods=2,main="",add.legend=F,xlab="Specificity",ylab="Sensitivity",add.opt.legend=F)
 calibration.plot(train.auc_data,N.bins=10,xlab="Predicted occurence",ylab="Proportion of observed occurence",main="")
@@ -417,7 +417,7 @@ were slightly elevated from its surrounding bathymetry (on hills).
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/response_curvesFull.png" alt="Figure 3. Correlation among independent variables used in modeling." width="2400" />
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/response_curvesFull.png" alt="Figure 3. Correlation among independent variables used in modeling." width="2400" />
 
 <p class="caption">
 
@@ -432,7 +432,7 @@ or absence.The probability of presence in this
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/GLMdiagnosticsFull.png" alt="Figure 3. Model diagnostic plots for Acanthogorgia armata presence or absence GLM." width="1800" />
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/GLMdiagnosticsFull.png" alt="Figure 3. Model diagnostic plots for Acanthogorgia armata presence or absence GLM." width="1800" />
 
 <p class="caption">
 
@@ -462,10 +462,10 @@ slope, and TPI and the predict function for the GLM model.
 ``` r
 #######MAKE THE PREDICTION RASTER ##############################################
 #Predict the model to a raster to see where suitable habitat is predicted
-Acanth.GLM.pa.raster<-predict(raster.stack, Acanth.GLM.pa,filename="./Predictions/GLMFull",fun=predict, na.rm=TRUE,overwrite=TRUE,progress="text",type="response",newdata.guaranteed=TRUE)
+Acanth.GLM.pa.raster<-predict(raster.stack, Acanth.GLM.pa,filename="Predictions/GLMFull",fun=predict, na.rm=TRUE,overwrite=TRUE,progress="text",type="response",newdata.guaranteed=TRUE)
 
 
-png(filename="./Figures/ProbabilityMapFull.png",width=6,height=6.5,res=300,units="in")
+png(filename="Figures/ProbabilityMapFull.png",width=6,height=6.5,res=300,units="in")
 par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
 plot(Acanth.GLM.pa.raster, main = "", box=F,col = viridis(255),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Probability of presence",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
 dev.off()
@@ -477,7 +477,7 @@ and along areas of moderate slope.
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/ProbabilityMapFull.png" alt="Figure 4. Predicted probability of presence for Arthrogorgia armata in SubAreas 6-12." width="1800" />
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/ProbabilityMapFull.png" alt="Figure 4. Predicted probability of presence for Arthrogorgia armata in SubAreas 6-12." width="1800" />
 
 <p class="caption">
 
@@ -569,23 +569,23 @@ slopeframe$se.fit <- predict(Acanth.GLM.paf,newdata=slopeframe,type="response",s
 p2<-ggplot(slopeframe)+geom_ribbon(aes(x=slope,ymin=predicted-se.fit,ymax=predicted+se.fit),fill="grey70") + geom_line(aes(x=slope,y=predicted))+xlab("Slope")+ylab("Probability of presence")
 
 #plot it
-png(paste0("./Figures/response_curvesfold",i,".png"),width=8,height=6,units="in",res=300)
+png(paste0("Figures/response_curvesfold",i,".png"),width=8,height=6,units="in",res=300)
 grid.arrange(p1,p2,p3,ncol=1)
 dev.off()
 
 ####FIGURE 3 - MAXENT DIAGNOSTICS PLOTS
 #Plots for data
-png(filename=paste0("./Figures/GLMdiagnosticsfold",i,".png"),width=6,height=6,res=300,units="in")
+png(filename=paste0("Figures/GLMdiagnosticsfold",i,".png"),width=6,height=6,res=300,units="in")
 par(mfcol=c(2,2),family="sans",mar=c(4,4,1,.01))
 auc.roc.plot(train.auc_data,opt.methods=2,main="",add.legend=F,xlab="Specificity",ylab="Sensitivity",add.opt.legend=F)
 calibration.plot(train.auc_data,N.bins=10,xlab="Predicted occurence",ylab="Proportion of observed occurence",main="")
 presence.absence.hist(train.auc_data,truncate.tallest=TRUE,main="",ylab="Number of observations",xlab="Predicted probability")
 dev.off()
 
-Acanth.GLM.pa.rasterf<-predict(raster.stack, Acanth.GLM.paf,filename=paste("./Predictions/GLMFold",i,sep=""),fun=predict, na.rm=TRUE,overwrite=TRUE,progress="text",type="response",newdata.guaranteed=TRUE)
+Acanth.GLM.pa.rasterf<-predict(raster.stack, Acanth.GLM.paf,filename=paste("Predictions/GLMFold",i,sep=""),fun=predict, na.rm=TRUE,overwrite=TRUE,progress="text",type="response",newdata.guaranteed=TRUE)
 
 
-png(filename=paste0("./Figures/ProbabilityMapFold",i,".png"),width=6,height=6.5,res=300,units="in")
+png(filename=paste0("Figures/ProbabilityMapFold",i,".png"),width=6,height=6.5,res=300,units="in")
 par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
 plot(Acanth.GLM.pa.rasterf, main = "", box=F,col = viridis(255),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Probability of presence",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
 dev.off()
@@ -598,7 +598,7 @@ Relatively high probabilities of presence were apparent in a band from
 
 <div class="figure" style="text-align: center">
 
-<img src="./Figures/ProbabilityMapFold1.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="./Figures/ProbabilityMapFold2.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="./Figures/ProbabilityMapFold3.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="./Figures/ProbabilityMapFold4.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="./Figures/ProbabilityMapFold5.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" />
+<img src="Figures/ProbabilityMapFold1.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="Figures/ProbabilityMapFold2.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="Figures/ProbabilityMapFold3.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="Figures/ProbabilityMapFold4.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" /><img src="Figures/ProbabilityMapFold5.png" alt="Figure 5. Maps of model predictions for 5 randomly selected folds of the data." width="49%" height="33%" />
 
 <p class="caption">
 
@@ -624,15 +624,15 @@ individual model validation folds
     ## ------------ ------- ----------- -------------- ------------- --------------
     ##  Full model    187      0.006        0.946           NA            0.73     
     ## 
-    ##  GLMFold_1    141.1     0.006        0.942          0.934         0.745     
+    ##  GLMFold_1    168.4     0.006         0.94          0.985         0.699     
     ## 
-    ##  GLMFold_2    168.2     0.006        0.949          0.821         0.773     
+    ##  GLMFold_2    158.8     0.006        0.937          0.966          0.8      
     ## 
-    ##  GLMFold_3    167.5     0.006        0.944          0.959         0.808     
+    ##  GLMFold_3     140      0.006         0.96          0.879         0.752     
     ## 
-    ##  GLMFold_4    138.9     0.006        0.942          0.947         0.735     
+    ##  GLMFold_4    115.9     0.006        0.963          0.845          0.7      
     ## 
-    ##  GLMFold_5    138.1     0.006        0.963          0.88          0.755     
+    ##  GLMFold_5     167      0.006        0.944          0.966         0.759     
     ## ----------------------------------------------------------------------------
     ## 
     ## Table: Table continues below
@@ -643,15 +643,15 @@ individual model validation folds
     ## ------------- -------------- ------------- --------------- --------------
     ##      NA           0.113           NA            0.071            NA      
     ## 
-    ##     0.713         0.105          0.134          0.067          0.086     
+    ##     0.89          0.118          0.087          0.075          0.053     
     ## 
-    ##    -0.118         0.124          0.041          0.077          0.042     
+    ##     0.86           0.11          0.118          0.072          0.068     
     ## 
-    ##     0.849         0.119          0.082          0.075          0.051     
+    ##     0.473         0.113          0.107          0.069          0.081     
     ## 
-    ##     0.731         0.105          0.138          0.066          0.087     
+    ##     0.352         0.106          0.115          0.062          0.097     
     ## 
-    ##     0.472         0.113          0.107          0.069          0.081     
+    ##     0.866         0.119          0.083          0.075          0.053     
     ## -------------------------------------------------------------------------
 
 ## Model uncertainty
@@ -689,14 +689,14 @@ p<-ggplot()+
   theme_dark()+
   theme(panel.grid = element_blank())
 
-png(filename="./Figures/Residuals.png",width=6,height=7,res=300,units="in")
+png(filename="Figures/Residuals.png",width=6,height=7,res=300,units="in")
 print(p)
 dev.off()
 ```
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Residuals.png" alt="Figure 6. Spatial patterns in model residuals for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Residuals.png" alt="Figure 6. Spatial patterns in model residuals for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
 
 <p class="caption">
 
@@ -713,16 +713,16 @@ plot it.
 ``` r
 #Calculate prediction error and SE
 
-F1<-raster("./Predictions/GLMFold1")
-F2<-raster("./Predictions/GLMFold2")
-F3<-raster("./Predictions/GLMFold3")
-F4<-raster("./Predictions/GLMFold4")
-F5<-raster("./Predictions/GLMFold5")
+F1<-raster("Predictions/GLMFold1")
+F2<-raster("Predictions/GLMFold2")
+F3<-raster("Predictions/GLMFold3")
+F4<-raster("Predictions/GLMFold4")
+F5<-raster("Predictions/GLMFold5")
 Error.stack<-stack(F1,F2,F3,F4,F5)
 #plot(Error.stack)
 Prediction.se<-calc(Error.stack,fun=sd)
 
-png(filename="./Figures/Fullmapse.png",width=6,height=7,res=300,units="in")
+png(filename="Figures/Fullmapse.png",width=6,height=7,res=300,units="in")
 par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
 plot(Prediction.se, main = "", box=F,col = colorRampPalette(c("darkgreen","coral"))(30),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Prediction standard error",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
 dev.off()
@@ -730,7 +730,7 @@ dev.off()
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/./Figures/Fullmapse.png" alt="Figure 7. Spatial patterns in model prediction error for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
+<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Fullmapse.png" alt="Figure 7. Spatial patterns in model prediction error for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
 
 <p class="caption">
 
