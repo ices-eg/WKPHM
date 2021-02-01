@@ -114,7 +114,7 @@ dev.off()
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Figure1.png" alt="Figure 1. Locations of presence and absence observations for *Acanthogorgia armata* from the ICES database" width="1800" />
+<img src="Figures/Figure1.png" alt="Figure 1. Locations of presence and absence observations for *Acanthogorgia armata* from the ICES database" width="1800" />
 
 <p class="caption">
 
@@ -246,7 +246,7 @@ dev.off()
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Figure2.png" alt="Figure 2. Map of bathymetry, slope, TPI and Oxygen used as explanatory variables in this analysis of ICES VME data" width="1800" />
+<img src="Figures/Figure2.png" alt="Figure 2. Map of bathymetry, slope, TPI and Oxygen used as explanatory variables in this analysis of ICES VME data" width="1800" />
 
 <p class="caption">
 
@@ -290,7 +290,7 @@ modeling.
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Figure3.png" alt="Figure 3. Correlation among independent variables used in modeling." width="1800" />
+<img src="Figures/Figure3.png" alt="Figure 3. Correlation among independent variables used in modeling." width="1800" />
 
 <p class="caption">
 
@@ -417,7 +417,7 @@ were slightly elevated from its surrounding bathymetry (on hills).
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/response_curvesFull.png" alt="Figure 3. Correlation among independent variables used in modeling." width="2400" />
+<img src="Figures/response_curvesFull.png" alt="Figure 3. Correlation among independent variables used in modeling." width="2400" />
 
 <p class="caption">
 
@@ -432,7 +432,7 @@ or absence.The probability of presence in this
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/GLMdiagnosticsFull.png" alt="Figure 3. Model diagnostic plots for Acanthogorgia armata presence or absence GLM." width="1800" />
+<img src="Figures/GLMdiagnosticsFull.png" alt="Figure 3. Model diagnostic plots for Acanthogorgia armata presence or absence GLM." width="1800" />
 
 <p class="caption">
 
@@ -477,7 +477,7 @@ and along areas of moderate slope.
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/ProbabilityMapFull.png" alt="Figure 4. Predicted probability of presence for Arthrogorgia armata in SubAreas 6-12." width="1800" />
+<img src="Figures/ProbabilityMapFull.png" alt="Figure 4. Predicted probability of presence for Arthrogorgia armata in SubAreas 6-12." width="1800" />
 
 <p class="caption">
 
@@ -696,7 +696,7 @@ dev.off()
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Residuals.png" alt="Figure 6. Spatial patterns in model residuals for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
+<img src="Figures/Residuals.png" alt="Figure 6. Spatial patterns in model residuals for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
 
 <p class="caption">
 
@@ -730,7 +730,7 @@ dev.off()
 
 <div class="figure">
 
-<img src="C:/Users/rooperc/Desktop/ICES_WKPHM/Figures/Fullmapse.png" alt="Figure 7. Spatial patterns in model prediction error for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
+<img src="Figures/Fullmapse.png" alt="Figure 7. Spatial patterns in model prediction error for GLM predicting probability of Acanthogorgia armata in SubAreas 6-12." width="1800" />
 
 <p class="caption">
 
