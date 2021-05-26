@@ -1,0 +1,960 @@
+---
+title: "WKPHM Advice Template"
+author: "WKPHM"
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output: 
+  pdf_document:
+    pandoc_args: --webtex
+---
+
+```{r setup, include=FALSE}
+library(sf)
+library(rnaturalearth)
+library(ggplot2)
+library(ncdf4)
+library(rgdal)
+library(rgeos)
+library(gstat)
+library(raster)
+library(corrplot)
+library(dismo)
+library(PresenceAbsence)
+library(AICcmodavg)
+library(gridExtra)
+library(viridis)
+library(googledrive)
+library(pander)
+library(tinytex)
+library(knitr)
+library(spdep)
+library(ape)
+library(blockCV)
+library(gghalfnorm)
+source("VarianceInflationFactors.R")
+source("CV_spatial_blocking.R")
+dir.create("Figures")
+dir.create("Predictions")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# VME Taxonomic Group(s) modelled: The Order*Antipatharia* (Black Corals) including its Families (Table 1)
+
+# Regional Extent: North Atlantic Ocean (ICES management subareas 6, 7, 8, 9, 10, 12)
+
+# Summary
+
+The objective of this piece of code was to develop a relatively simple model for a species of coral that could be used to demonstrate the pieces of the proposed ICES PHM advice template. The species chosen was *Antipatharia*. It was chosen simply because it had a fairly large number of observations in the ICES VME database (n = 421). This is not meant to be a realistic model of the distribution of *Antipatharia*, but is instead used here to generate the components of an PHM (data, model, residuals) that can be used to evaluate its predictions and utility. The modelling method used was a general linear model with a binomial distribution. Maps of model predictions are provided in Figure 11. Maps of residuals in Figure 9. Maps of prediction error in Figure 12. The model predicted that the highest probability of presence for *Antipatharia* was in a band from 50-60 degrees North latitude and along areas of moderate slope.
+
+# A. Study resolution
+
+## A.1.	Location of the study area (or management region)
+
+This modelling was carried out for the North Atlantic Ocean. 
+
+### a.	Spatial extent of the modelled area
+
+The specific management regions considered for this modelling exercise were ICES subareas 6, 7, 8, 9, 10, and 12 and comprised the spatial extent of the model (Figure 1). 
+
+```{r bringinthedata, echo=FALSE,cache=TRUE, results='hide',message=FALSE}
+#NOTE: This section of code is for reference only and describes how the raw data was processed. I have not provided the raw data from GEBCO or World Ocean Atlas since the files are so large and take so much time to process. Neither these or the aggregated rasters were small enough to upload to the github site, so they are located in a zip file on my google drive. I can provide the raw files on request (Chris.Rooper@dfo-mpo.gc.ca), the code below downloads the aggregated layers from the google drive.
+
+#Download the depth, oxygen and ICES area rasters and polygon from the google drive
+#temp <- tempfile(fileext = ".zip")
+#drive_deauth()
+#drive_download(as_id("1k0j9yTDFAme0zwxRLOJtrip3TXjKI9L6"), path = temp, overwrite = TRUE)
+#unzip(temp,overwrite=TRUE)
+
+#Read in the raster layers and derive slope and TPI from the bathymerty
+ICES_bathy<-raster("ICES_variables/bathy")
+ICES_slope<-terrain(ICES_bathy,opt="slope",progress="text",overwrite=TRUE)
+ICES_TPI<-terrain(ICES_bathy,opt="tpi",progress="text",overwrite=TRUE)
+O2.raster<-raster("ICES_variables/O2")
+raster.stack<-stack(ICES_bathy,ICES_slope,ICES_TPI,O2.raster)
+names(raster.stack)<-c("bathy","slope","TPI","O2")
+
+#Import the ICES region shapefile and subset to include only SubAreas 6-12
+newproj<-crs(ICES_bathy)
+ICES_regions<-readOGR("ICES_variables/Shapefiles","ICES_Areas_20160601_cut_dense_3857")
+ICES_regions<-spTransform(ICES_regions,newproj)
+ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan",
+                     "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+
+
+```
+### b.	Spatial resolution of the model and independent variables
+
+```{r importdata,results='hide',message=FALSE,warning=FALSE, echo=FALSE,cache=TRUE}
+species<-c("Antipatharia","Antipathella subpinnata","Antipathes dichotoma","Antipathes erinaceus","Antipathes virgata","Bathypathes","Bathypathes patula",
+  "Leiopathes","Parantipathes","Parantipathes hirondelle","Stauropathes arctica","Stauropathes punctata","Stichopathes dissimilis","Stichopathes flagellum",
+  "Stichopathes gravieri","Stichopathes richardi","Tanacetipathes squamosa","Tylopathes")
+
+VME_data<-read.csv("vme_open_extraction11012021.csv",header=TRUE,stringsAsFactors=FALSE) #Import the entire database
+VME_data<-subset(VME_data,as.Date(VME_data$ObsDate,format="%b %e %Y %I:%M")>"1980-01-01")  #Subset data collected after 1980
+VME_data$Depth<-abs((as.numeric(VME_data$DepthLower)+as.numeric(VME_data$DepthUpper))/2) #Generate a mean depth for each point (where depths were collected) based on the upper and lower recorded depths
+All_depths<-aggregate(Depth~MiddleLatitude+MiddleLongitude,data=VME_data,FUN="mean",na.rm=TRUE) #Aggregate these depths to each position in the database
+dim(VME_data)
+dim(All_depths)
+
+rev(sort(table(VME_data$Species)))
+All_points<-unique(data.frame(Longitude=VME_data$MiddleLongitude,Latitude=VME_data$MiddleLatitude)) #Generate the unique positions of all the observations in the database
+All_points<-All_points[All_points$Latitude!=0,] # Remove a record with Latitude and Longitude = 0. This is likely an error
+dim(All_points)
+
+All_points<-merge(All_points,All_depths,by.x=c("Longitude","Latitude"),by.y=c("MiddleLongitude","MiddleLatitude"),all.x=TRUE) #Add the depth values to the unique position set
+
+Antipatharia<-subset(VME_data,VME_data$Species %in% species) #Subset the data for a species of interest
+Table1<-table(Antipatharia$Species)
+Table1<-data.frame(Species=row.names(Table1),Count=as.vector(Table1))
+Antipatharia<-data.frame(ICES_ID=Antipatharia$ï..ICES_ID,Species=Antipatharia$Species,Longitude=Antipatharia$MiddleLongitude,Latitude=Antipatharia$MiddleLatitude,Presence=1,Number=as.numeric(Antipatharia$Number)) #Create a data frame of the minimal data for presence of the species, positions and numbers observed
+Antipatharia<-merge(All_points,Antipatharia,by=c("Longitude","Latitude"),all.x=TRUE) #Merge the species data with the full set of observation points
+Antipatharia$Species<-"Antipatharia" # Fill the Species column
+Antipatharia$Presence[is.na(Antipatharia$Presence)]<-0 #Add zeros for absence at those observation points where the species of interest was not recorded (these are now absences)
+Antipatharia$Number[is.na(Antipatharia$Number)]<-0 # Add zeros for number column at those observation points where the species of interst was not recorded
+#dim(Antipatharia)
+#dim(All_points) # These two data frames should have the same number of rows. For this species, the numbers don't match, which means there is a duplicate record at a Lat-long pair for the species
+
+t1<-which(duplicated(cbind(Antipatharia$Latitude,Antipatharia$Longitude))) # find which record is duplicated
+t2<-which(duplicated(cbind(Antipatharia$Latitude,Antipatharia$Longitude),fromLast=TRUE)) #find the other record that is duplicated
+Antipatharia[c(t1,t2),] # Look to see whats happening. It looks like there is one record with number = 1 and one with number = 2, etc
+Antipatharia[t1,"Number"]<-Antipatharia[t1,"Number"]+Antipatharia[t2,"Number"] # Change 1 record to reflect the total number observed at that position
+Antipatharia<-Antipatharia[-t2,] # Delete the remaining record
+#dim(Antipatharia)
+
+#table(Antipatharia$Presence) # See how many presences (1) and absences (0) there are in the data
+
+
+```
+
+
+```{r pressure, echo=FALSE, results='hide', message=FALSE,warning=FALSE,cache=TRUE}
+ bathy<-raster(" C:/Users/rooperc/Desktop/Deep Sea Coral Research/ICES WKPHM/ICES_WKPHM/OldVariables/GEBCO_bathy.tif")
+# newproj<-crs(bathy)
+# ICES_regions<-readOGR("Shapefiles","ICES_Areas_20160601_cut_dense_3857")
+# ICES_regions<-spTransform(ICES_regions,newproj)
+# ICES_regions3<-subset(ICES_regions,as.numeric(as.character(ICES_regions$SubArea))>5&as.numeric(as.character(ICES_regions$SubArea))<13)
+# plot(bathy)
+# plot(ICES_regions3,add=TRUE,border="red")
+# points(cbind(Antipatharia$Longitude[Antipatharia$Presence==1],Antipatharia$Latitude[Antipatharia$Presence==1]),pch=20,col="purple")
+# 
+# ICES_bathy<-crop(bathy,ICES_regions3,progress="text",overwrite=TRUE,filename="ICES_bathy3")
+# ICES_bathy[ICES_bathy>0]<-NA
+# ICES_bathy<-ICES_bathy*-1
+# writeRaster(ICES_bathy,"ICES_bathy3",overwrite=TRUE)
+# plot(ICES_bathy)
+# 
+# file1<-nc_open("woa18_all_o00_01.nc")
+# O2<-ncvar_get(file1,varid="o_an",collapse_degen = FALSE)
+# Lat<-as.vector(ncvar_get(file1,varid="lat"))
+# Lon<-as.vector(ncvar_get(file1,varid="lon"))
+# Depth<-as.vector(ncvar_get(file1,varid="depth"))
+# Lon1<-rep(Lon,length(Lat)*length(Depth))
+# Lat1<-rep(rep(Lat,each=length(Lon)),length(Depth))
+# Depth1<-rep(rep(Depth,each=length(Lon)),each=length(Lat))
+# O2<-as.vector(ncvar_get(file1,varid="o_an"))
+# O2_data<-data.frame(Longitude=Lon1,Latitude=Lat1,Depth=Depth1)
+# t1<-which(O2_data$Latitude>=30&O2_data$Latitude<=87&O2_data$Longitude>=-80&O2_data$Longitude<=60)
+# O2_data<-data.frame(Longitude=Lon1[t1],Latitude=Lat1[t1],Depth=Depth1[t1],O2=O2[t1])
+# O2_data<-subset(O2_data,O2_data$O2>=0)
+# O2_depth<-aggregate(Depth~Longitude+Latitude,data=O2_data,FUN="min")
+# O2_data<-merge(O2_depth,O2_data,by=c("Longitude","Latitude","Depth"))
+# nc_close(file1)
+# 
+# O2.project<-SpatialPointsDataFrame(coords=c(O2_data["Longitude"],O2_data["Latitude"]),data=O2_data["O2"], proj4string=newproj) 
+# t1<-which(raster::extract(ICES_bathy,O2.project)>0)
+# O2.project<-O2.project[t1,]
+# 
+# #				Interpolate to raster
+# O2.idw<-gstat(id = "O2", formula = O2~1, data=O2.project, nmax=8, set=list(idp = 2.5))
+# O2.raster<-interpolate(ICES_bathy,O2.idw,overwrite=TRUE,xyOnly=TRUE,filename="O2raster", progress="text")
+# 
+# O2.raster<-mask(O2.raster,ICES_bathy,overwrite=TRUE, filename="O2raster2")
+# plot(O2.raster)
+# 
+# O2.raster<-aggregate(O2.raster,fact=2,filename="O2",FUN="mean",progress="text",overwrite=TRUE)
+# bathy<-aggregate(ICES_bathy,fact=2,filename="bathy",FUN="mean",progress="text",overwrite=TRUE)
+
+O2raster2<-raster(" C:/Users/rooperc/Desktop/Deep Sea Coral Research/ICES WKPHM/ICES_WKPHM/OldVariables/O2raster2")
+O230<-raster::extract(O2.raster,cbind(Antipatharia$Longitude,Antipatharia$Latitude))
+O215<-raster::extract(O2raster2,cbind(Antipatharia$Longitude,Antipatharia$Latitude))
+bathy30<-raster::extract(ICES_bathy,cbind(Antipatharia$Longitude,Antipatharia$Latitude))
+bathy15<-raster::extract(bathy,cbind(Antipatharia$Longitude,Antipatharia$Latitude))
+
+
+p1<-ggplot()+geom_point(aes(x=O215,y=O230))+geom_smooth(aes(x=O215,y=O230),method="glm")+xlab("Oxygen (15 arc-second)")+ylab("Oxygen (30 arc-second)")
+p2<-ggplot()+geom_point(aes(x=-1*bathy15,y=bathy30))+geom_smooth(aes(x=-1*bathy15,y=bathy30),method="glm")+xlab("Depth (15 arc-second)")+ylab("Depth (30 arc-second)")
+
+png("Figures/Figure2_5.png",height=6,width=6,units="in",res=300)
+p3<-(grid.arrange(p1,p2,ncol=1))
+print(p3)
+dev.off()
+
+```
+```{r stackandextract,cache=TRUE,message=FALSE,warning=FALSE,results="hide",echo=FALSE}
+
+#Extract the explanatory variables to the VME data locations
+variables<-data.frame(raster::extract(raster.stack,cbind(Antipatharia$Longitude,Antipatharia$Latitude)))
+#variables2<-data.frame(raster::extract(raster.stack,cbind(VME_data$MiddleLongitude,VME_data$MiddleLatitude)))
+#VME_data2<-cbind(VME_data,variables2)
+#VME_data2<-subset(VME_data2,VME_data2$bathy>0)
+#rev(sort(table(VME_data2$Species)))
+Antipatharia<-cbind(Antipatharia,variables)
+variables<-subset(variables,variables$bathy>0)
+Antipatharia<-subset(Antipatharia,Antipatharia$bathy>0)
+
+#table(Antipatharia$Presence)
+
+png("Figures/Figure2.png",height=6,width=6,units="in",res=300)
+plot(raster.stack)
+dev.off()
+```
+
+The spatial resolution of the model and independent variables were 30 arc-second grid (~ 1 km^2). 
+
+### c.	Spatial precision (of observations and independent variables)
+
+The spatial precision of the original observations from the ICES database were unknown, but likely varied from m to km. It was assumed that all observations were precisely located, but the spatial resolution (30 arc-seconds) likely reflected a larger scale than the spatial uncertainty of the individual points. The independent variables were compilations from global scale databases and had spatial resolutions of 15 arc-seconds or 0.5 degrees latitude and longitude.
+
+### d.	Depth resolution/range/extent (of the observations and independent variables)
+
+The depth range of the observations of *Antipatharia* (from the depth data in the VME database) was from `r round(min(Antipatharia$Depth[Antipatharia$Depth>0],na.rm=TRUE),1)` to `r round(max(Antipatharia$Depth,na.rm=TRUE),1)` m (mean = `r round(mean(Antipatharia$Depth,na.rm=TRUE),1)` m, SE = `r round(sd(Antipatharia$Depth,na.rm=TRUE),2)`). The depth range of the modeled area (ICES subareas 6, 7, 8, 9, 10, and 12) was from `r round(minValue(ICES_bathy),0)` to `r round(maxValue(ICES_bathy),0)` m.
+
+## A.2.	Temporal extent of the data
+### a.	Dates of data extent
+
+The dates observations were collected ranged from `r min(as.Date(VME_data$ObsDate[as.Date(VME_data$ObsDate,format="%b %e %Y %I:%M")>"1900-01-01"],format="%b %e %Y %I:%M"))` to `r max(as.Date(VME_data$ObsDate[as.Date(VME_data$ObsDate,format="%b %e %Y %I:%M")>"1900-01-01"],format="%b %e %Y %I:%M"))`.
+
+### b.	Precision of date/time
+
+The precision of the date and the time of the data was assumed to be the closest day. 
+
+### c.	Data/time resolution
+
+The resolution of the date and time was assumed to be the day.
+
+### d.	Impacts over time to consider in the data set (e.g. historical fishing effort)
+
+Fishing occurred over the entire time frame from which these data points were collected. We did not attempt to account for historical fishing effort over this time. There may have been climate impacts occurring over the time frame of the data observations as well, however, these were not accounted for in the analyses.
+
+
+# B. Dependent data
+
+The dependent data are shown in Figure 1. 
+
+```{r MapThePoints,message=FALSE,warning=FALSE,results="hide", echo=FALSE}
+#IMPORT A BASEMAP AND TRANSFORM TO A NICER PROJECTION FOR THE NORTH ATLANTIC
+bg = ne_countries(scale = "medium",  returnclass = "sf")
+p<-ggplot()+
+  #basemap
+  geom_sf(data = bg)+
+  coord_sf(xlim = range(Antipatharia$Longitude, na.rm = TRUE), 
+           ylim = range(Antipatharia$Latitude, na.rm = TRUE), 
+           expand = TRUE)+
+  
+  # add points
+  geom_point(data = Antipatharia[order(Antipatharia$Presence),], 
+             aes(x=Longitude,y=Latitude,group=as.factor(Presence),color=as.factor(Presence)),
+             alpha = 0.7, shape=20, size = 2)+
+    
+  
+  # formatting
+  scale_fill_viridis_d(option = "plasma")+
+  scale_color_viridis_d(option = "plasma")+
+  labs(x=NULL, y=NULL, 
+       fill = 'Presence', 
+       color = 'Presence')+
+  theme_dark()+
+  theme(panel.grid = element_blank())
+
+png("Figures/Figure1.png",height=6,width=6,unit="in",res=300)
+print(p)
+dev.off()
+
+```
+```{r figure1, fig.cap="Figure 1. Locations of presence and absence observations for *Antipatharia* from the ICES database", echo=FALSE}
+knitr::include_graphics(here::here("Figures/Figure1.png"))
+```
+
+Table 1. Number of records for each taxonomic grouping in the order *Antipatharia* from the ICES VME database.
+```{r newtable2, echo=FALSE,warning=FALSE}
+knitr::kable(Table1[rev(order(Table1$Count)),], row.names=FALSE,format = "pandoc")
+```
+
+
+
+## B.1.	Data type (presence, absence, abundance)
+
+The data used for modeling *Antipatharia* distribution were observed presences of the Order (n = `r dim(Antipatharia[Antipatharia$Presence==1,])[1]`) that occurred in ICES subareas 6,7,8,9,10 and 12.  
+
+## B.2.	Data source (e.g. type of survey(s) combined)
+
+The data were compiled from the ICES VME database (http://vme.ices.dk/map.aspx). As such, they came from a variety of sources including surveys, fisheries observations, etc. No attempt was made to account for the disperate sampling designs of the observations.
+
+## B.3.	Measure of sampling effort (if known)
+
+Sampling effort was unknown.
+
+## B.4.	Catchability or detectability (known or assumed)
+
+Neither catchability or detectability were known for this data We assumed the catchability and detectibility were the same for the different types of observations used in the modelling.
+
+## B.5.	Taxonomic level
+
+The taxonomic level modelled here was the Order*Antipatharia* (see Table 1 for individual components).
+
+## B.6.	Functional attributes (its ecology)
+
+*Antipatharia* are a diverse, long-lived and fragile species. They occur in deep-water and are habitat forming structures important to many fishes, invertebrates other taxonomic groups. 
+
+## B.7.	Taxonomic confidence of species/assemblages
+
+The taxonomic confidence of the assemblage was assumed to be good. Identification of *Antipatharians* to the Order level should be attainable for non-experts. 
+
+## B.8.	Rationale for taxonomic/assemblage level modelled
+
+Antipatharia are a group that shares common habitat requirements and depth distribution. They are closely related and the order is globally distributed at deep depths. This Order has been previously modelled using Maximum entropy methods on a global extent (Yesson et al., 2017).
+
+## B.9.	Source of absence data
+
+Absences were inferred from sample locations where observations for other species were made, but *Antipatharia* were not recorded. In total there were `r dim(Antipatharia[Antipatharia$Presence==0,])[1]` absences in the ICES VME database.
+
+## B.10.	Other potential errors or biases in the data
+
+There are many potential sources of error in the data, including errors in positioning of the records, errors in species identification (including both false positives and false negatives). Figure 1 shows that there are some spatial biases in the data set as well. 
+
+## B.11.	Data filtering steps
+
+The code to filter the data completed the following
+
+1. Imported the dependent data from the open ICES data base
+2. Subsetted the observations that occurred after 1980
+3. Calculated a mean depth for each observation where an upper and lower depth were recorded
+4. Compiled a data frame of the unique observation locations (by their recorded middle latitude and longitude)
+5. Subsetted all the records where members of *Antipatharia* was observed and assigned them a presence and summed any counts that were recorded at the location (or provides count = 1 where no count was provided, but presence was noted)
+6. Merges those presence records with the entire database and assigns presence and counts = 0 to the records with no presence observation
+7. There were 165 duplicate record for this the taxonomic grups where the paired entries included different numbers of counts (e.g. a count of *Antipatharia* = 1 and a count of *Stichopathes gravieri* = 3). The counts were summed to 4 for the larger taxonomic group and the duplicate lines removed.
+
+## B.12.	Taxonomic aggregation steps
+
+The records for the Order *Antipatharia* were aggregated by unique locations (Table 1). 
+
+## B.13.	Method for combining dependent data sources (if done outside the modelling)
+
+No other dependent data sources were used in this modelling.
+
+
+# C. Independent data
+
+## C.1.	Independent data (environmental variables used)
+
+Four independent variables were used in building a model of *Antipatharia* distribution; bathymetry, topographic position index, seafloor slope and Oxygen concentration (Figure 2). 
+```{r figure2, fig.cap="Map of bathymetry, slope, TPI and Oxygen used as explanatory variables in this analysis of ICES VME data", echo=FALSE}
+knitr::include_graphics(here::here("Figures/Figure2.png"))
+```
+
+## C.2.	Independent data source (source of raw or derived data)
+
+The bathymetry used here was downloaded from the GEBCO website (GEBCO_2020 grid; www.gebco.net/data_and_products/gridded_bathymetry_data). It consists of gridded bathymetry from a wide varieity of sources on a 15 arc-second grid for the globe. The details of the data sources can be found on the GEBCO website.  
+
+From the bathymetry two derived variables (slope and topographic position index) were calculated using the raster package (Hijmans 2019). These variables were calculated on bathymetry aggregated (see below) to a 30 arc-second grid to save processing time.
+
+Oxygen data were downloaded from the World Ocean Atlas 2018 database (https://www.nodc.noaa.gov/OC5/woa18/). This data is a compilation of oxygen measurements averaged over time for as long as there are measurments at standardized depth intervals and on a standard 0.5 degree longitude and latitude grid. These data were clipped to the area of interest and interpolated to the 15 arc-second grid used by the bathymetry. The four explanatory variables are shown in Figure 2.  
+
+## C.3.	Native spatial and temporal resolution of the independent data
+
+The native spatial resolution of the GEBCO bathymetry was 15 arc-second grid. The native spatial resolution for the Oxygen data was 0.5 degrees longitude and latitude. It should be noted that both these data sources are conglomerations of data collected over varying spatial and temporal scales (e.g. the temporal scale is since ~1900's in the case of some bathymetry measurements). For complete documentation of the spatial and temporal scale of the raw data the GEBCO and NODC respective websites should be consulted (www.gebco.net/data_and_products/gridded_bathymetry_data and https://www.nodc.noaa.gov/OC5/woa18/).
+
+Based on the distribution of presences and absences in Figure 1 (and the desire for the code to run fairly fast), a subset of the ICES subareas (SubAreas 6,7,8,9,10 and 12) were chosen for the modeling. All independent data layers were trimmed to include only observations and explanatory variables from this region.
+
+## C.4.	Data processing and scaling (method for downscaling or aggregation)
+
+Both the bathymetry and oxygen layers were aggregated to a 30 arc-second grid in order to save processing time. For bathymetry, the mean of the 15 arc-second grid cells were aggregated to the 30 arc-second grid. For the Oxygen data, they were first projected and interpolated to the 15 arc-second grid of the GEBCO bathymetry, then these data were aggregated to the 30 arc-second grid (again using the mean value of the smaller grid cells).
+
+### a.	Goodness of fit for downscaled aggregated data
+
+The aggregated data at the dependent data sites for both Oxygen and bathymetry represented the higher resolution very well (r > 0.9, Figure 3). 
+
+```{r figure2_5, fig.cap="Higher resolution (15 arc-second) and aggregated data (30 arc-second) for Oxygen concentration and bottom depth at the locations of the dependent data.", echo=FALSE}
+knitr::include_graphics(here::here("Figures/Figure2_5.png"))
+```
+
+### b.	Measurement errors and bias
+
+Measurement errors in the data or bias in the data were not accounted for beyond the processing conducted on the raw measurements by GEBCO or NODC.
+
+## C.5.	Derivation methods and calculations for derived variables
+
+From the bathymetry two derived variables (slope and topographic position index) were calculated using the raster package (Hijmans 2019). These variables were calculated on bathymetry aggregated (see below) to a 30 arc-second grid to save processing time.
+
+## C.6.	Rationale for inclusion of independent variables clearly stated and ecologically relevant
+
+These four variables (depth, slope, topographic position index and oxygen) have been found in previous studies to influence the distribution of *Antipatharia* (Huff et al., 2013, Yesson et al., 2017, Etnoyer et al., 2018).
+
+# D. Modelling approach
+## D.1.	Model steps are clearly described with enough detail to be independently reproduced
+
+### a.	Code for model provided
+
+The code and data used for this model are publically available at https://github.com/ices-eg/WKPHM. The specific code to generate the models and this document are contained in the file "Annex_4_code.Rmd".
+
+### b.	Packages used are referenced 
+
+The packages used to develop this model are referenced in the above .Rmd file. The key packages used were "sf", "rnaturalearth","ggplot2","rgdal","rgeos","gstat","raster","dismo", and "PresenceAbsence" and are all available for download from CRAN. Additional functions are provided in two source scripts at https://github.com/ices-eg/WKPHM. The R version used here was R version 3.6.0 (2019-04-26) -- "Planting of a Tree" (R Core Development Team 2019).  
+
+### c.	Data is made available as supplementary material
+
+The independent variables are publically available from a google drive using the code provided in "Annex_4_code.Rmd" or by contacting Chris.Rooper@dfo-mpo.gc.ca. The dependent variables are available from the ICES VME database (see above).
+
+## D.2.	Biases (spatial, temporal and other) acknowledged and described
+
+There were no inherent biases in the modeling method (although there were biases in the dependent and independant data described above).
+
+## D.3.	Methods and approaches to collinearity in independent variables are given
+
+### a.	Collinearity in independent variables tested
+
+The four explanatory variables were examined for collinearity using a pearson correlations (Figure 4). Variance inflation inflation factors (Zuur et al. 2002) were also examined. In both cases the values were low, suggesting that the variables were fairly independent of each other.
+
+```{r lookforcollinearity,message=FALSE,warning=FALSE,results='hide',echo=FALSE}
+
+cormat1<-cor(variables,use="complete.obs")
+png("Figures/Figure3.png",width=6,height=6,units="in",res=300)
+corrplot(cormat1,method="number",type="lower")
+dev.off()
+```
+
+Table 2. Variance inflation factors for independent variables using in modeling.
+```{r table1, echo=FALSE}
+table2<-corvif(variables)
+table2<-data.frame(Variable=c("Bathymetry","Slope","TPI","Oxygen"),VIF=as.vector(table2))
+knitr::kable(table2,digits = 3, col.names=c("Variable","VIF"), format = "pandoc",row.names=FALSE)
+
+```
+
+```{r figure3, fig.cap="Correlation among independent variables used in modeling.", echo=FALSE}
+knitr::include_graphics(here::here("Figures/Figure3.png"))
+```
+
+
+### b.	Criteria for variable/dimension reduction provided
+
+None of the variance inflation factors exceeded 3, indicating that dimension reduction was not warranted.
+
+## D.4.	Choice of modelling method is explained and justified 
+```{r buildsimplemodel,message=FALSE,warning=FALSE,results=FALSE,cache=TRUE,echo=FALSE}
+TableData<-data.frame(Fold=character(),AIC=numeric(),threshold=numeric(),AUC_training=numeric(),AUC_testing=numeric(),TSS_training=numeric(),TSS_testing=numeric(),Cor_training=numeric(),Cor_testing=numeric(),RMSE_training=numeric(),RMSE_testing=numeric(),stringsAsFactors=FALSE)
+
+Acanth.GLM.pa<-glm(Presence~bathy+slope+TPI+O2+I(bathy^2)+I(slope^2)+I(TPI^2)+I(O2^2),data=Antipatharia,family=binomial)
+summary(Acanth.GLM.pa)
+
+#Stepwise reduction based on AIC
+#Acanth.GLM.pa<-glm(Presence~bathy+slope+TPI+O2+I(slope^2)+I(TPI^2)+I(O2^2),data=Antipatharia,family=binomial)
+#summary(Acanth.GLM.pa)
+#All Variables were significant
+
+
+######TEST THE PREDICTIONS AGAINST THE TRAINING DATA############################
+TableData[1,1]<-"Full model"
+train.auc_data<-data.frame(cbind(seq(1,length(Acanth.GLM.pa$y),1),Acanth.GLM.pa$y,Acanth.GLM.pa$fitted.values))
+##Calculate the AUC
+TableData[1,4]<-round(auc(train.auc_data,na.rm=TRUE)[1],3)
+#Calculate the RMSE
+TableData[1,10]<-round(sqrt(mean((train.auc_data$X2-train.auc_data$X3)^2)),3)
+#Calculate the TSS
+train.threshold<-optimal.thresholds(train.auc_data,opt.methods=3)[1,2]
+
+TableData[1,3]<-train.threshold
+TableData[1,6]<-round(sensitivity(cmx(train.auc_data,threshold=train.threshold))+specificity(cmx(train.auc_data,threshold=train.threshold))-1,3)[1]
+#Calculate the Spearmans Rank correlation
+TableData[1,8]<-round(cor.test(train.auc_data[,2],train.auc_data[,3],method="spearman")$estimate,3)
+#AIC
+TableData[1,2]<-Acanth.GLM.pa$aic
+
+#RESPONSE CURVE PLOTS
+## generate prediction frame
+bathyframe <- data.frame(bathy=seq(min(Antipatharia$bathy,na.rm=TRUE),max(Antipatharia$bathy,na.rm=TRUE),length=51),O2=median(Antipatharia$O2,na.rm=TRUE),slope=median(Antipatharia$slope,na.rm=TRUE),TPI=median(Antipatharia$TPI,na.rm=TRUE))
+bathyframe$predicted <- predict(Acanth.GLM.pa,newdata=bathyframe,type="response",se.fit=TRUE)$fit
+bathyframe$se.fit <- predict(Acanth.GLM.pa,newdata=bathyframe,type="response",se.fit=TRUE)$se.fit
+
+p4<-ggplot(bathyframe)+geom_ribbon(aes(x=bathy,ymin=predicted-se.fit,ymax=predicted+se.fit),fill="grey70") + geom_line(aes(x=bathy,y=predicted))+xlab("Depth (m)")+ylab("Probability of presence")
+
+
+
+TPIframe <- data.frame(TPI=seq(min(Antipatharia$TPI,na.rm=TRUE),max(Antipatharia$TPI,na.rm=TRUE),length=51),O2=median(Antipatharia$O2,na.rm=TRUE),slope=median(Antipatharia$slope,na.rm=TRUE),bathy=median(Antipatharia$bathy,na.rm=TRUE))
+TPIframe$predicted <- predict(Acanth.GLM.pa,newdata=TPIframe,type="response",se.fit=TRUE)$fit
+TPIframe$se.fit <- predict(Acanth.GLM.pa,newdata=TPIframe,type="response",se.fit=TRUE)$se.fit
+
+p3<-ggplot(TPIframe)+geom_ribbon(aes(x=TPI,ymin=predicted-se.fit,ymax=predicted+se.fit),fill="grey70") + geom_line(aes(x=TPI,y=predicted))+xlab("Topographic position index")+ylab("Probability of presence")
+
+
+O2frame <- data.frame(O2=seq(min(Antipatharia$O2,na.rm=TRUE),max(Antipatharia$O2,na.rm=TRUE),length=51),slope=median(Antipatharia$slope,na.rm=TRUE),TPI=median(Antipatharia$TPI,na.rm=TRUE),bathy=median(Antipatharia$bathy,na.rm=TRUE))
+O2frame$predicted <- predict(Acanth.GLM.pa,newdata=O2frame,type="response",se.fit=TRUE)$fit
+O2frame$se.fit <- predict(Acanth.GLM.pa,newdata=O2frame,type="response",se.fit=TRUE)$se.fit
+
+p1<-ggplot(O2frame)+geom_ribbon(aes(x=O2,ymin=predicted-se.fit,ymax=predicted+se.fit),fill="grey70") + geom_line(aes(x=O2,y=predicted))+xlab("Oxygen")+ylab("Probability of presence")
+
+slopeframe <- data.frame(slope=seq(min(Antipatharia$slope,na.rm=TRUE),max(Antipatharia$slope,na.rm=TRUE),length=51),O2=median(Antipatharia$O2,na.rm=TRUE),TPI=median(Antipatharia$TPI,na.rm=TRUE),bathy=median(Antipatharia$bathy,na.rm=TRUE))
+slopeframe$predicted <- predict(Acanth.GLM.pa,newdata=slopeframe,type="response",se.fit=TRUE)$fit
+slopeframe$se.fit <- predict(Acanth.GLM.pa,newdata=slopeframe,type="response",se.fit=TRUE)$se.fit
+
+p2<-ggplot(slopeframe)+geom_ribbon(aes(x=slope,ymin=predicted-se.fit,ymax=predicted+se.fit),fill="grey70") + geom_line(aes(x=slope,y=predicted))+xlab("Slope")+ylab("Probability of presence")
+
+#plot it
+png("Figures/response_curvesFull.png",width=8,height=6,units="in",res=300)
+grid.arrange(p4,p1,p2,p3,ncol=1)
+dev.off()
+
+####FIGURE 3 - MAXENT DIAGNOSTICS PLOTS
+#Plots for data
+png(filename="Figures/GLMdiagnosticsFull.png",width=6,height=6,res=300,units="in")
+par(mfcol=c(2,2),family="sans",mar=c(4,4,1,.01))
+auc.roc.plot(train.auc_data,opt.methods=2,main="",add.legend=F,xlab="Specificity",ylab="Sensitivity",add.opt.legend=F)
+calibration.plot(train.auc_data,N.bins=10,xlab="Predicted occurence",ylab="Proportion of observed occurence",main="")
+presence.absence.hist(train.auc_data,truncate.tallest=TRUE,main="",ylab="Number of observations",xlab="Predicted probability")
+dev.off()
+
+
+```
+
+The modelling method chosen was a general linear model (GLM). This model was primarily chosen for its simplicity of assumptions (stated below), its usefulness in fitting binomial (presence-absence) data, and the many previous applications of this method to predicting species distributions.
+
+### a.	Modelling assumptions are clearly stated
+
+The basic GLM assumptions are;
+1) Independence among data points,
+2) The distribution of the residuals is binomially distributed,
+3) homogenous variance across the fitted values, and
+4) a linear relationship (in this case second order polynomial) between response and predictor.
+
+### b.	Potential violations of model assumptions are explored
+
+Diagnostic plots of Pearson residuals are shown in Figure 5. The residuals did not indicate any serious violations of GLM assumptions.
+```{r assumptiontest,echo=FALSE,results='hide',warning=FALSE,message=FALSE}
+E2<-resid(Acanth.GLM.pa,type='pearson')
+F2<-fitted(Acanth.GLM.pa,type='response')
+
+png(filename="Figures/GLMAssumptionsFull.png",width=6,height=6,res=300,units="in")
+par(mfrow=c(2,3),family="sans",mar=c(4,4,1,.01))
+#print(gghalfnorm(residuals(Acanth.GLM.pa)))
+plot(x=F2,y=E2,xlab='fitted values',ylab='Pearson residuals')
+abline(h=0,lty=2)
+plot(cooks.distance(Acanth.GLM.pa),ylim=c(0,.1),ylab="Cook distance values",type='h')
+plot(x=Antipatharia$bathy,y=E2,xlab="Depth (m)",ylab="Pearson residuals")
+abline(h=0,lty=2)
+plot(x=Antipatharia$slope,y=E2,xlab="Slope (%)",ylab="Pearson residuals")
+abline(h=0,lty=2)
+plot(x=Antipatharia$TPI,y=E2,xlab="TPI",ylab="Pearson residuals")
+abline(h=0,lty=2)
+plot(x=Antipatharia$O2,y=E2,xlab="Oxygen",ylab="Pearson residuals")
+abline(h=0,lty=2)
+dev.off()
+
+
+```
+```{r figureassumpt, fig.cap="Diagnostic plots for GLM model assumptions.", echo=FALSE}
+knitr::include_graphics(here::here("Figures/GLMAssumptionsFull.png"))
+```
+
+
+## D.5.	Model application is clearly detailed
+
+To build the model of *Antipatharia* a generalized linear model was constructed that contained four explanatory variables (depth, slope, topographic position index and oxygen). Up to second order polynomials were included and the dependent data was presence or absence of *Antipatharia*. The full model was
+
+
+$$
+y = \alpha+\beta_{1}depth+\beta_{2}slope+\beta_{3}TPI+\beta_{4}O_{2}+\beta_{5}depth^2+\beta_{6}slope^2+\beta_{7}TPI^2+\beta_{8}O_{2}^2+\sigma
+$$
+A binomial error distribution ($\sigma$) was used for the model fitting. A full model was fit initially containing all the variables and polynomials. This model was reduced sequentially by removing the least significant term and comparing the AIC for the resulting reduced model. This was repeated until there was no reduction in AIC when removing a variable and all variables remaining in the model were significant. 
+
+### a.	Model settings are comprehensively reported
+
+The default GLM settings in R were used (see Annex_4_code.Rmd). The only setting that was modified was the specification of the binomial error distribution.
+
+### b.	Model complexity is assessed
+
+The results of the sequential variable reduction resulted in the retention of all four terms; Depth, Slope, TPI and Oxygen (and the polynomials for these variables). The deviance explained by the model ($D^2$) was `r round(1-(Acanth.GLM.pa$deviance/Acanth.GLM.pa$null.deviance),3)`. 
+
+The model complexity was assessed against simpler models with less terms during the sequential variable reduction step and the most complex model (containing all terms) was found to be the most appropriate (Table 3).
+
+Table 3. Summary of GLM model predicting presence or absence of*Antipatharia*.
+```{r table2, echo=FALSE,warning=FALSE}
+knitr::kable(anova(Acanth.GLM.pa), digits = 3, format = "pandoc")
+```
+
+## D.6.	Model response curves are generated (where appropriate) and compared to expectations
+
+Model response curves are shown in Figure 6. Probability of presence of *Antipatharia* was highest around 2000 m depth, at a relatively narrow range of Oxygen levels from 260 to 275 ml/L. at moderate slopes > 0.1 and at areas that were slightly elevated from its surrounding bathymetry (on hills). The partial response curves showed a dome shaped response for all four of the significant variables. None of the results were abnormal or unexpected.
+```{r responsefig, fig.cap="Correlation among independent variables used in modeling.", echo=FALSE}
+knitr::include_graphics(here::here("Figures/response_curvesFull.png"))
+```
+### a.	Modelling method-specific term estimates or coefficients are reported (where relevant)
+
+The model specific term estimates are provided in Table 4.
+
+Table 4. Model coefficients, significance and standard error estimates for GLM predicting *Antipatharia* probability of presence.
+
+```{r table2_5, echo=FALSE,warning=FALSE}
+knitr::kable(summary(Acanth.GLM.pa)$coefficients, digits = 3, format = "pandoc")
+```
+
+### b.	Independent variable importance is reported
+
+The relative importance of variables in the model was measured by sequentially removing the individual variables, fitting a new model and calculating the deviance explained. The deviance explained was then scaled to the full model to determine the relative drop in model goodness-of-fit with removal of each variable. The results showed that slope was the most important variable determining the probability of *Antipatharia* presence, and Oxygen was the least important (Figure 7).
+
+```{r variableimportance,echo=FALSE,results='hide',cache=TRUE,warning=FALSE}
+Minus_depth<-glm(Presence~slope+TPI+O2+I(slope^2)+I(TPI^2)+I(O2^2),data=Antipatharia,family=binomial)$deviance/Acanth.GLM.pa$null.deviance
+Minus_slope<-glm(Presence~bathy+TPI+O2+I(bathy^2)+I(TPI^2)+I(O2^2),data=Antipatharia,family=binomial)$deviance/Acanth.GLM.pa$null.deviance
+Minus_TPI<-glm(Presence~bathy+slope+O2+I(bathy^2)+I(slope^2)+I(O2^2),data=Antipatharia,family=binomial)$deviance/Acanth.GLM.pa$null.deviance
+Minus_O2<-glm(Presence~bathy+slope+TPI+I(bathy^2)+I(slope^2)+I(TPI^2),data=Antipatharia,family=binomial)$deviance/Acanth.GLM.pa$null.deviance
+Full_m<-Acanth.GLM.pa$deviance/Acanth.GLM.pa$null.deviance
+RMSE_model<-c((1-Full_m)/(1-Full_m),(1-Minus_depth)/(1-Full_m),(1-Minus_slope)/(1-Full_m),(1-Minus_TPI)/(1-Full_m),(1-Minus_O2)/(1-Full_m))
+RMSE_names<-c("Full model","No depth","No slope","No TPI","No Oxygen")
+RMSE_data<-data.frame(Names=factor(RMSE_names,levels=rev(c("Full model","No slope","No depth","No TPI","No Oxygen"))),Value=RMSE_model)
+
+p1<-ggplot(RMSE_data)+geom_bar(aes(x=Names,y=Value),stat="identity")+ylab("Relative deviance explained")+xlab("")+coord_flip()
+
+png("Figures/RelativeImportance.png",width=6,height=6,res=300,units="in")
+print(p1)
+dev.off()
+
+
+```
+
+
+```{r relimpo, fig.cap="Relative importance of variables included in the Antipatharia presence or absence GLM measured by their contribution to deviance explained when sequentially removed from the model.", echo=FALSE}
+knitr::include_graphics(here::here("Figures/RelativeImportance.png"))
+```
+
+# E. Model uncertainty
+
+## E.1.	Model specific goodness of fit statistics have been checked and reported
+
+The *Antipatharia* model AUC was `r TableData$AUC_training`, an excellent model according to the standards of Hosmer et al., (2013).
+
+Using a threshold of `r TableData$threshold` resulted in prediction of `r cmx(train.auc_data,threshold=train.threshold)[1]` of the `r cmx(train.auc_data,threshold=train.threshold)[1]+ cmx(train.auc_data,threshold=train.threshold)[2]` observed presences correctly, while predicting about `r round(100*cmx(train.auc_data,threshold=train.threshold)[4]/(cmx(train.auc_data,threshold=train.threshold)[3]+ cmx(train.auc_data,threshold=train.threshold)[4]),0)`% of the absences correctly (sensitivity = `r round(sensitivity(cmx(train.auc_data,threshold=train.threshold))[1],3)` and specificity = `r  round(specificity(cmx(train.auc_data,threshold=train.threshold))[1],3)`)  
+
+Table 5. Confusion matrix of predicted and observed presence and absence of *Antipatharia* using a probability threshold `r TableData$threshold`.
+```{r table3, echo=FALSE}
+table5<-cmx(train.auc_data,threshold=train.threshold)
+table5<-data.frame(c("Predicted","Presence","Absence"),c("Absence",as.vector(table5[,1])),c("Presence",as.vector(table5[,2])))
+knitr::kable(table5, col.names=c("","Observed",""),digits = 0, format = "pandoc",format.args=list(font=1))
+```
+
+### a.	Multiple measures of goodness of fit have been examined
+
+Commonly used goodness-of-fit measures for binomial models are provided in Table 5 for the GLM predicting *Antipatharia* probability of presence. These include the True Skill Statistic (Allouche et al., 2006), the root-mean-squared-error and the Spearman's rank correlation. Other threshold dependent metrics can be calculated from the confusion matrix (Table 4).
+
+Model diagnostics indicated some minor issues with the prediction of presence or absence (Figure 8).The predicted occurence did not always include the 1:1 line (indicating that at some levels of probability the observed occurrences were lower than expected). For example, the model predicted lower than expected probability of presence at ~0.3-0.4 and higher than expected probability of occurrence at ~0.6-0.8.
+
+```{r diagnosfig, fig.cap="Model diagnostic plots for Antipatharia presence or absence GLM.", echo=FALSE}
+knitr::include_graphics(here::here("Figures/GLMdiagnosticsFull.png"))
+```
+## E.2.	Spatial autocorrelation in the residuals has been assessed and reported 
+```{r moran,warning=FALSE,cache=TRUE,message=FALSE,results='hide',echo=FALSE}
+ozone.dists <- as.matrix(dist(cbind(Antipatharia$Longitude, Antipatharia$Latitude)))
+
+ozone.dists.inv <- 1/ozone.dists
+
+#ozone.dists.inv[ozone.dists<= 50000]<-0
+diag(ozone.dists.inv) <- 0
+
+ozone.dists.inv[1:5, 1:5]
+M1<-Moran.I(Acanth.GLM.pa$residuals, ozone.dists.inv,na.rm=TRUE,scaled=TRUE)
+
+```
+There was significant spatial autocorrelation in the model residuals measured by Moran's I (*I* = `r M1$p.value`). This was not unexpected given the clumping of observations in the study area.
+
+## E.3.	Residuals have been tested against assumed distribution (where appropriate)
+
+Not applicable for the binomial distribution. Figure 3 shows model residuals (on the logit scale are shown for each data point used to model *Antipatharia* and diagnostics.
+
+### Spatial patterns in residuals
+
+Model residuals are shown in Figure 9. This confirms the results of the Moran's I, in that there is some clustering of larger residuals in the areas sampled at higher densities. 
+
+```{r mapmodeluncertainty,message=FALSE,warning=FALSE, results='hide',cache=TRUE,echo=FALSE}
+##################################################################
+
+#Acanth.GLM.padata<-subset(Acanth.GLM.pa$data,Acanth.GLM.pa$data$slope>=0)
+#Acanth.GLM.padata$residuals<-residuals(Acanth.GLM.pa,type="pearson")
+Acanth.GLM.padata<-data.frame(Acanth.GLM.pa$data,residuals=residuals(Acanth.GLM.pa,type="pearson"))
+Acanth.GLM.padata<-Acanth.GLM.padata[order(Acanth.GLM.padata$residuals),]
+
+p<-ggplot()+
+  #basemap
+  geom_sf(data = bg)+
+  coord_sf(xlim = range(Acanth.GLM.padata$Longitude, na.rm = TRUE), 
+           ylim = range(Acanth.GLM.padata$Latitude, na.rm = TRUE), 
+           expand = TRUE)+
+  
+  # add points
+  geom_point(data = Acanth.GLM.padata, 
+             aes(x=Longitude,y=Latitude,fill=residuals),
+             alpha = 0.7, shape=21, size = 2)+
+  
+  # formatting
+  scale_fill_viridis_c(option = "magma")+
+  scale_color_viridis_c(option = "magma")+
+  theme_dark()+
+  theme(panel.grid = element_blank())
+
+png(filename="Figures/Residuals.png",width=6,height=7,res=300,units="in")
+print(p)
+dev.off()
+```
+
+# F. Model validation
+## F.1.	Training and testing data splitting method clearly described 
+
+An internal model validation method was chosen, since independent data were not available to use as a validation data set. K-fold cross-validation was used here. Five (k) folds were chosen at random. To account for the spatial bias in the data, the spatial block cross-validation package (Valvani et al., 2019) was used to choose the folds.
+
+
+### a.	Potential spatial biases were accounted for in splitting the data
+
+The spatial blocking method (Valvani et al., 2019) was used to split the data.
+
+### b.	A standard method used for cross-validation
+
+k-fold cross-validation is a standard method. The data was divided into 5 equal portions and a model then fit to 80% of the data and tested against the remaining 20% of the data. This was repeated for each subdivision of the data. The same maps and diagnostics were produced for each model fit on the k-folds. 
+
+The data folds appeared to show the same patterns as the full model. Relatively high probabilities of presence were apparent in a band from 40-50 North Latitude.
+
+The model performance was similar for all the training data sets (the full model and the individual folds). However the performance of the model on the testing folds was less impressive. For example, the True Skill Statistic for model folds 2 and 5 was very poor, indicating some potential issues with model performance.  
+
+## F.2.	Truly independent data used for model validation if available
+
+No truly independent data was available for model validation.
+
+```{r simplemodelvalidation,message=FALSE,warning=FALSE, results='hide',cache=TRUE,echo=FALSE}
+# 
+# points.project<-SpatialPoints(coords=c(Antipatharia["Longitude"],Antipatharia["Latitude"]), proj4string = newproj)
+# 
+#   autorange <- spatialAutoRange(rasterLayer = raster.stack, # raster stack
+#                                 sampleNumber = 10000, # number of cells to sample
+#                                 doParallel = TRUE,
+#                                 showPlots = FALSE)
+# 
+#  sp.blocks <- spatialBlock(speciesData = points.project,
+ #                            species = "sp",
+  #                           theRange = autorange$range, # distance by which blocks are created
+   #                          k = 5,
+    #                         selection = 'random',
+     #                        iteration = 2000,
+      #                       numLimit = 2, # min points in each category of data
+       #                      biomod2Format = FALSE,
+        #                     xOffset = 0, # shift the blocks horizontally
+         #                    yOffset = 0, # shift the blocks vertically
+          #                   progress = TRUE,
+           #                  showBlocks = TRUE)
+# 
+# 
+# 
+# 
+# 
+# tryfold<-Spatial_CV("CLASS",5,points.project,raster.stack)
+# 
+# SLpoints$Group<-tryfold$foldID
+
+# tryfold2<-data.frame(coordinates(points.project),tryfold$foldID)
+# SLpoints<-merge(SLpoints,tryfold2,by.x=c("Lon","Lat"),by.y=c("EASTING_M","NORTHING_M"),all.x=TRUE)
+#colnames(SLpoints)[13]<-"Group"
+#table(SLpoints$Group,SLpoints$PresAbs)
+
+
+
+
+
+##Sample training and testing data sets####
+Antipatharia$Group<-kfold(Antipatharia,k=5)
+
+foldlist<-vector(mode="list",length=5)
+
+###LOOP THROUGH THE FOLDS####
+for(i in 1:5){
+training.data<-subset(Antipatharia,Antipatharia$Group!=i)
+test.data<-subset(Antipatharia,Antipatharia$Group==i)
+
+#######MAKE THE MODELS#############
+Acanth.GLM.paf<-glm(Presence~slope+O2+TPI+I(slope^2)+I(O2^2)+I(TPI^2),data=training.data,family=binomial)
+summary(Acanth.GLM.pa)
+foldlist[[i]]<-Acanth.GLM.paf
+names(foldlist[i])<-paste0("AcanthGLMFold",i)
+
+######TEST THE PREDICTIONS AGAINST THE TRAINING DATA############################
+TableData[i+1,1]<-paste0("GLMFold_",i)
+train.auc_dataf<-data.frame(cbind(seq(1,length(Acanth.GLM.paf$y),1),Acanth.GLM.paf$y,Acanth.GLM.paf$fitted.values))
+##Calculate the AUC
+TableData[i+1,4]<-round(auc(train.auc_dataf,na.rm=TRUE)[1],3)
+#Calculate the RMSE
+TableData[i+1,10]<-round(sqrt(mean((train.auc_dataf$X2-train.auc_dataf$X3)^2)),3)
+#Calculate the TSS
+train.thresholdf<-optimal.thresholds(train.auc_dataf,opt.methods=3)[1,2]
+TableData[i+1,3]<-train.thresholdf
+TableData[i+1,6]<-round(sensitivity(cmx(train.auc_dataf,threshold=train.thresholdf))+specificity(cmx(train.auc_dataf,threshold=train.thresholdf))-1,3)[1]
+#Calculate the Spearmans Rank correlation
+TableData[i+1,8]<-round(cor.test(train.auc_dataf[,2],train.auc_dataf[,3],method="spearman")$estimate,3)
+#AIC
+TableData[i+1,2]<-Acanth.GLM.paf$aic
+
+print(cmx(train.auc_dataf,threshold=train.thresholdf))
+
+######TEST THE PREDICTIONS AGAINST THE TEST DATA############################
+pred<-predict(Acanth.GLM.paf,newdata=test.data,type="response")
+test.auc_dataf<-data.frame(cbind(seq(1,length(test.data$Presence),1),test.data$Presence,pred))
+test.auc_dataf<-subset(test.auc_dataf,test.auc_dataf$pred>=0)
+##Calculate the AUC
+TableData[i+1,5]<-round(auc(test.auc_dataf,na.rm=TRUE)[1],3)
+#Calculate the RMSE
+TableData[i+1,11]<-round(sqrt(mean((test.auc_dataf$V2-test.auc_dataf$pred)^2)),3)
+#Calculate the TSS
+TableData[i+1,7]<-round(sensitivity(cmx(test.auc_dataf,threshold=train.thresholdf))+specificity(cmx(test.auc_dataf,threshold=train.thresholdf))-1,3)[1]
+#Calculate the Spearmans Rank correlation
+TableData[i+1,9]<-round(cor.test(test.auc_dataf[,2],test.auc_dataf[,3],method="spearman")$estimate,3)
+
+#print(cmx(test.auc_dataf,threshold=train.thresholdf))
+
+#RESPONSE CURVE PLOTS
+## generate prediction frame
+TPIframe <- data.frame(TPI=seq(min(Antipatharia$TPI,na.rm=TRUE),max(Antipatharia$TPI,na.rm=TRUE),length=51),O2=median(Antipatharia$O2,na.rm=TRUE),slope=median(Antipatharia$slope,na.rm=TRUE))
+TPIframe$predicted <- predict(Acanth.GLM.paf,newdata=TPIframe,type="response",se.fit=TRUE)$fit
+TPIframe$se.fit <- predict(Acanth.GLM.paf,newdata=TPIframe,type="response",se.fit=TRUE)$se.fit
+
+p3<-ggplot(TPIframe)+geom_ribbon(aes(x=TPI,ymin=predicted-se.fit,ymax=predicted+se.fit),fill="grey70") + geom_line(aes(x=TPI,y=predicted))+xlab("Topographic position index")+ylab("Probability of presence")
+
+O2frame <- data.frame(O2=seq(min(Antipatharia$O2,na.rm=TRUE),max(Antipatharia$O2,na.rm=TRUE),length=51),slope=median(Antipatharia$slope,na.rm=TRUE),TPI=median(Antipatharia$TPI,na.rm=TRUE))
+O2frame$predicted <- predict(Acanth.GLM.paf,newdata=O2frame,type="response",se.fit=TRUE)$fit
+O2frame$se.fit <- predict(Acanth.GLM.paf,newdata=O2frame,type="response",se.fit=TRUE)$se.fit
+
+p1<-ggplot(O2frame)+geom_ribbon(aes(x=O2,ymin=predicted-se.fit,ymax=predicted+se.fit),fill="grey70") + geom_line(aes(x=O2,y=predicted))+xlab("Oxygen")+ylab("Probability of presence")
+
+slopeframe <- data.frame(slope=seq(min(Antipatharia$slope,na.rm=TRUE),max(Antipatharia$slope,na.rm=TRUE),length=51),O2=median(Antipatharia$O2,na.rm=TRUE),TPI=median(Antipatharia$TPI,na.rm=TRUE))
+slopeframe$predicted <- predict(Acanth.GLM.paf,newdata=slopeframe,type="response",se.fit=TRUE)$fit
+slopeframe$se.fit <- predict(Acanth.GLM.paf,newdata=slopeframe,type="response",se.fit=TRUE)$se.fit
+
+p2<-ggplot(slopeframe)+geom_ribbon(aes(x=slope,ymin=predicted-se.fit,ymax=predicted+se.fit),fill="grey70") + geom_line(aes(x=slope,y=predicted))+xlab("Slope")+ylab("Probability of presence")
+
+#plot it
+png(paste0("Figures/response_curvesfold",i,".png"),width=8,height=6,units="in",res=300)
+grid.arrange(p1,p2,p3,ncol=1)
+dev.off()
+
+####FIGURE 3 - MAXENT DIAGNOSTICS PLOTS
+#Plots for data
+png(filename=paste0("Figures/GLMdiagnosticsfold",i,".png"),width=6,height=6,res=300,units="in")
+par(mfcol=c(2,2),family="sans",mar=c(4,4,1,.01))
+auc.roc.plot(train.auc_data,opt.methods=2,main="",add.legend=F,xlab="Specificity",ylab="Sensitivity",add.opt.legend=F)
+calibration.plot(train.auc_data,N.bins=10,xlab="Predicted occurence",ylab="Proportion of observed occurence",main="")
+presence.absence.hist(train.auc_data,truncate.tallest=TRUE,main="",ylab="Number of observations",xlab="Predicted probability")
+dev.off()
+
+Acanth.GLM.pa.rasterf<-predict(raster.stack, Acanth.GLM.paf,filename=paste("Predictions/GLMFold",i,sep=""),fun=predict, na.rm=TRUE,overwrite=TRUE,progress="text",type="response",newdata.guaranteed=TRUE)
+
+
+png(filename=paste0("Figures/ProbabilityMapFold",i,".png"),width=6,height=6.5,res=300,units="in")
+par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
+plot(Acanth.GLM.pa.rasterf, main = "", box=F,col = jet.colors(255),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Probability of presence",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
+dev.off()
+}
+
+```
+Table 6. Model goodness of fit measures for the full model and the individual model validation folds
+```{r table5, echo=FALSE,warning=FALSE}
+knitr::kable(TableData[,1:7],digits = 3, format = "pandoc")
+knitr::kable(TableData[,c(1,8:11)],digits = 3, format = "pandoc")
+```
+
+
+```{r residualmapfig, fig.cap="Spatial patterns in model Pearson residuals for GLM predicting probability of *Antipatharia*.", echo=FALSE}
+knitr::include_graphics(here::here("Figures/Residuals.png"))
+```
+
+```{r foldfigsr, echo=FALSE,out.width="49%", out.height="33%",fig.show='hold',fig.align='center',fig.cap="Figure 5. Maps of model predictions for 5 randomly selected folds of the data."}
+knitr::include_graphics(c("Figures/ProbabilityMapFold1.png","Figures/ProbabilityMapFold2.png","Figures/ProbabilityMapFold3.png","Figures/ProbabilityMapFold4.png","Figures/ProbabilityMapFold5.png"))
+```
+```{r mapseofpredictions,message=FALSE,warning=FALSE,cache=TRUE,results='hide',cache=TRUE, echo=FALSE}
+#Calculate prediction error and SE
+
+F1<-raster("Predictions/GLMFold1")
+F2<-raster("Predictions/GLMFold2")
+F3<-raster("Predictions/GLMFold3")
+F4<-raster("Predictions/GLMFold4")
+F5<-raster("Predictions/GLMFold5")
+Error.stack<-stack(F1,F2,F3,F4,F5)
+#plot(Error.stack)
+Prediction.se<-calc(Error.stack,fun=sd)
+
+png(filename="Figures/Fullmapse.png",width=6,height=7,res=300,units="in")
+par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
+plot(Prediction.se, main = "", box=F,zlim=c(0,.05),col = viridis(255),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Prediction standard error",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
+dev.off()
+
+```
+
+
+```{r simplemodelpredictions,message=FALSE,warning=FALSE, results='hide',cache=TRUE,echo=FALSE}
+
+#######MAKE THE PREDICTION RASTER ##############################################
+#Predict the model to a raster to see where suitable habitat is predicted
+Acanth.GLM.pa.raster<-predict(raster.stack, Acanth.GLM.pa,filename="Predictions/GLMFull",fun=predict, na.rm=TRUE,overwrite=TRUE,progress="text",type="response",newdata.guaranteed=TRUE)
+
+
+png(filename="Figures/ProbabilityMapFull.png",width=6,height=6.5,res=300,units="in")
+par(mfrow=c(1,1),mar=c(5,4,1,1),family="sans")
+plot(Acanth.GLM.pa.raster, main = "", box=F,col = jet.colors(255),ext=ICES_regions3,legend.shrink=0.5,axis.args=list(cex.axis=0.65),legend.args=list(text="Probability of presence",cex=0.65,cex.lab=0.65,side=1,line=2),horiz=TRUE,ylab="Latitude",xlab="Longitude")
+dev.off()
+
+```
+
+
+
+# G. Model outputs
+## G.1.	Maps of model predictions, model residuals and prediction error have been produced
+
+Maps of model predictions are provided in Figure 11. Maps of residuals in Figure 9. Maps of prediction error in Figure 12. The model predicted that the highest probability of presence for *Antipatharia* was in a band from 50-60 degrees North latitude and along areas of moderate slope.
+
+```{r predictionmapfig, fig.cap="Predicted probability of presence for Antipatharia in SubAreas 6,7,8,9,10 and 12.", echo=FALSE}
+knitr::include_graphics(here::here("Figures/ProbabilityMapFull.png"))
+```
+
+
+```{r semapfig, fig.cap="Spatial patterns in model prediction error for GLM predicting probability of Antipatharia in SubAreas 6,7,8,9,10 and 12.", echo=FALSE}
+knitr::include_graphics(here::here("Figures/Fullmapse.png"))
+```
+
+## G.2.	Areas of model extrapolation are clearly defined
+
+The model was not extrapolated outside ICES subareas 6, 7, 8, 9, 10, and 12, although within this region, there were some areas with little or no sampling.
+
+## G.3.	The prediction unit is clearly defined (and explained if necessary)
+
+The prediction unit is the probability of presence or absence of *Antipatharia*.
+
+## G.4.	Thresholding methods (for dichotomising probability into presence or absence) are clearly described and appropriate
+
+No thresholding was done (beyond the thresholding for calculating goodness-of-fit measures).
+
+### a.	The sensitivity of model outcomes to threshold value chosen has been explored
+
+Sensitivity to threshold values was not explored, but in a formal analysis of the model could be completed using the provided model outputs.
+
+
+# References
+Allouche, O., Tsoar, A., & Kadmon, R. (2006). Assessing the accuracy of species distribution models: Prevalence, kappa and the true skill statistic (TSS). Journal of Applied Ecology, 43, 1223–1232. https://doi. org/10.1111/j.1365-2664.2006.01214.x
+
+Etnoyer, P. J., Wagner, D., Fowle, H. A., Poti, M., Kinlan, B., Georgian, S. E., & Cordes, E. E. (2018). Models of habitat suitability, size, and age-class structure for the deep-sea black coral Leiopathes glaberrima in the Gulf of Mexico. Deep-Sea Research Part II: Topical Studies in Oceanography, 150, 218–228. https://doi.org/10.1016/j.dsr2.2017.10.008
+
+Hijmans R. J. (2019). raster: Geographic Data Analysis and Modeling. R package version 3.0-7.  https://CRAN.R-project.org/package=raster
+
+Hosmer, D. W. Jr., Lemeshow, S., and Sturdivant, R. X. (2013). Assessing the Fit of the Model. Applied Logistic Regression, 3rd Edn. John Wiley & Sons. doi: 10.1002/9781118548387.ch5
+
+Huff, D. D., Yoklavich, M. M., Love, M. S., Watters, D. L., Chai, F., & Lindley, S. T. (2013). Environmental factors that influence the distribution, size, and biotic relationships of the Christmas tree coral Antipathes dendrochristos in the Southern California Bight. Marine Ecology Progress Series, 494, 159–177. https://doi.org/10.3354/meps10591
+
+R Core Team (2019). R: A language and environment for statistical computing. R  Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/.
+
+Valavi R, Elith J, Lahoz-Monfort JJ, Guillera-Arroita G. blockCV: An R package for generating spatially or environmentally separated folds for k-fold cross-validation of species distribution models. Methods Ecol Evol. 2019; 10:225–232. https://doi.org/10.1111/2041-210X.13107
+  
+Yesson, C., Bedford, F., Rogers, A. D., & Taylor, M. L. (2017). The global distribution of deep-water Antipatharia habitat. Deep-Sea Research Part II: Topical Studies in Oceanography, 145, 79–86. https://doi.org/10.1016/j.dsr2.2015.12.004
+
+
+
