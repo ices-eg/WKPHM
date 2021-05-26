@@ -31,7 +31,6 @@ library(ape)
 library(blockCV)
 library(gghalfnorm)
 source("VarianceInflationFactors.R")
-source("CV_spatial_blocking.R")
 dir.create("Figures")
 dir.create("Predictions")
 knitr::opts_chunk$set(echo = TRUE)
@@ -728,44 +727,34 @@ No truly independent data was available for model validation.
 
 ```{r simplemodelvalidation,message=FALSE,warning=FALSE, results='hide',cache=TRUE,echo=FALSE}
 # 
-# points.project<-SpatialPoints(coords=c(Antipatharia["Longitude"],Antipatharia["Latitude"]), proj4string = newproj)
+#  points.project<-SpatialPoints(coords=c(Antipatharia["Longitude"],Antipatharia["Latitude"]), proj4string = sp::CRS(SRS_string="OGC:CRS84"))
 # 
-#   autorange <- spatialAutoRange(rasterLayer = raster.stack, # raster stack
-#                                 sampleNumber = 10000, # number of cells to sample
-#                                 doParallel = TRUE,
-#                                 showPlots = FALSE)
+#    autorange <- spatialAutoRange(rasterLayer = raster.stack, # raster stack
+#                                  sampleNumber = 10000, # number of cells to sample
+#                                  doParallel = TRUE,
+#                                  showPlots = FALSE)
 # 
-#  sp.blocks <- spatialBlock(speciesData = points.project,
- #                            species = "sp",
-  #                           theRange = autorange$range, # distance by which blocks are created
-   #                          k = 5,
-    #                         selection = 'random',
-     #                        iteration = 2000,
-      #                       numLimit = 2, # min points in each category of data
-       #                      biomod2Format = FALSE,
-        #                     xOffset = 0, # shift the blocks horizontally
-         #                    yOffset = 0, # shift the blocks vertically
-          #                   progress = TRUE,
-           #                  showBlocks = TRUE)
+#    tryfold <- spatialBlock(speciesData = points.project,
+#                             species = NULL,
+#                             theRange = autorange$range, # distance by which blocks are created
+#                              k = 5,
+#                              selection = 'random',
+#                              iteration = 2000,
+#                              numLimit = 0, # min points in each category of data
+#                              biomod2Format = FALSE,
+#                              xOffset = 0, # shift the blocks horizontally
+#                              yOffset = 0, # shift the blocks vertically
+#                              progress = TRUE,
+#                              showBlocks = TRUE)
 # 
+# plot(raster.stack[[1]])
+# plot(tryfold$blockpolys,add=TRUE) 
+# tryfold$records
 # 
-# 
-# 
-# 
-# tryfold<-Spatial_CV("CLASS",5,points.project,raster.stack)
-# 
-# SLpoints$Group<-tryfold$foldID
-
-# tryfold2<-data.frame(coordinates(points.project),tryfold$foldID)
-# SLpoints<-merge(SLpoints,tryfold2,by.x=c("Lon","Lat"),by.y=c("EASTING_M","NORTHING_M"),all.x=TRUE)
-#colnames(SLpoints)[13]<-"Group"
-#table(SLpoints$Group,SLpoints$PresAbs)
-
-
-
-
+# Antipatharia$Group<-tryfold$foldID
 
 ##Sample training and testing data sets####
+
 Antipatharia$Group<-kfold(Antipatharia,k=5)
 
 foldlist<-vector(mode="list",length=5)
